@@ -4,6 +4,9 @@
 
 **12位投资大师 | 支持A股 | 本地AI | 专业分析**
 
+<img width="1016" height="739" alt="afm-1" src="https://github.com/user-attachments/assets/8be945fc-9d32-47a7-8c38-3d8312116071" />
+
+
 ## 项目特色
 
 - **12位投资大师**: 集成12位世界级投资分析师的投资理念
@@ -100,6 +103,8 @@
 - **核心理念**: 价格行为分析
 - **关键指标**: 技术指标、支撑阻力、趋势分析
 
+<img width="1416" alt="afm-7" src="https://github.com/user-attachments/assets/56dcccfa-acec-43ed-b39a-b05196097022" />
+
 
 ## 安装指南
 
@@ -190,7 +195,7 @@ AI-FUND-MASTER.bat
 - **uv**: 感谢Charlie Marsh和Astral团队开发的极速Python包管理器uv，为项目依赖管理提供了卓越的性能
 - **开源社区**: 所有贡献者和支持者
 
-### 投资大师致敬
+### 向投资大师致敬
 感谢所有投资大师的智慧和理念，为我们的AI系统提供了宝贵的投资哲学：
 - 沃伦·巴菲特 & 查理·芒格
 - 彼得·林奇

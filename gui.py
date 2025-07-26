@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AI基金大师GUI界面 - PyQt5版本
-使用PyQt5重新实现的现代化界面
+AI基金大师GUI界面 - Tkinter版本
+使用Tkinter重新实现的界面
 """
 
 import sys
@@ -15,14 +15,10 @@ import threading
 from datetime import datetime, timedelta
 from io import StringIO
 
-from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QTabWidget, QLabel, QPushButton, QLineEdit, QTextEdit, QComboBox,
-    QCheckBox, QProgressBar, QGroupBox, QGridLayout, QScrollArea,
-    QMessageBox, QFileDialog, QFrame, QSplitter, QDateEdit
-)
-from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QDate
-from PyQt5.QtGui import QFont, QIcon, QPalette, QColor
+import tkinter as tk
+from tkinter import ttk, messagebox, filedialog, scrolledtext
+from tkinter import font as tkFont
+from tkcalendar import DateEntry
 
 
 class OutputRedirector:
@@ -38,11 +34,12 @@ class OutputRedirector:
             self.original_stdout.flush()
         
         # 写入到GUI控件
-        if self.text_widget and hasattr(self.text_widget, 'append'):
-            # 移除末尾的换行符，因为append会自动添加
+        if self.text_widget:
+            # 移除末尾的换行符，因为insert会保持原格式
             clean_text = text.rstrip('\n\r')
             if clean_text:  # 只有非空文本才添加
-                self.text_widget.append(f"[DEBUG] {clean_text}")
+                self.text_widget.insert(tk.END, f"[DEBUG] {clean_text}\n")
+                self.text_widget.see(tk.END)
     
     def flush(self):
         if self.original_stdout:
@@ -50,12 +47,10 @@ class OutputRedirector:
 
 # 导入原有的功能模块
 from src.utils.ollama_utils import (
-    is_ollama_installed, 
-    is_ollama_server_running, 
     get_locally_available_models,
-    start_ollama_server,
     ensure_ollama_and_model
 )
+from check_ollama_env import OllamaChecker
 from src.tools.api import set_api_interrupt, clear_api_interrupt
 from src.utils.html_report import generate_html_report
 from src.utils.display import format_trading_output
@@ -67,7 +62,6 @@ from langgraph.graph import END, StateGraph
 from src.agents.portfolio_manager import portfolio_management_agent
 from src.graph.state import AgentState
 from src.utils.analysts import get_analyst_nodes
-from src.utils.unified_data_accessor import unified_data_accessor
 from src.utils.progress import progress
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -103,7 +97,7 @@ def run_hedge_fund(
     model_provider: str = "OpenAI",
 ):
     # 检查是否在GUI环境中运行
-    is_gui = 'tkinter' in sys.modules or 'PyQt5' in sys.modules
+    is_gui = 'tkinter' in sys.modules
     
     # 只在非GUI环境中启动rich进度显示
     if not is_gui:
@@ -132,7 +126,6 @@ def run_hedge_fund(
                     "start_date": start_date,
                     "end_date": end_date,
                     "analyst_signals": {},
-                    "unified_data_accessor": unified_data_accessor,  # 传递实际的unified_data_accessor对象
                 },
                 "metadata": {
                     "show_reasoning": show_reasoning,
@@ -148,7 +141,7 @@ def run_hedge_fund(
         # Safety check: ensure we have valid decisions
         if portfolio_decisions is None:
             print("Warning: Failed to parse portfolio manager response, creating default decisions")
-            portfolio_decisions = {ticker: {"action": "hold", "quantity": 0, "confidence": 50.0, "reasoning": "Error parsing portfolio manager response"} for ticker in tickers}
+            portfolio_decisions = {ticker: {"action": "hold", "quantity": 0, "confidence": 50.0, "reasoning": "投资组合管理器解析失败，采用默认持有策略"} for ticker in tickers}
 
         return {
             "decisions": portfolio_decisions,
@@ -163,6 +156,7 @@ def run_hedge_fund(
 def start(state: AgentState):
     """Initialize the workflow with the input message and prefetch all data."""
     from src.utils.data_prefetch import data_prefetcher
+    from src.utils.unified_data_accessor import unified_data_accessor
     
     # 获取分析参数
     data = state["data"]
@@ -176,6 +170,9 @@ def start(state: AgentState):
     # 将预获取的数据和数据预取器存储到状态中
     state["data"]["prefetched_data"] = prefetched_data
     state["data"]["data_prefetcher"] = data_prefetcher
+    
+    # 添加统一数据访问器到状态中
+    state["data"]["unified_data_accessor"] = unified_data_accessor
     
     return state
 
@@ -218,15 +215,16 @@ def create_workflow(selected_analysts=None):
     return workflow
 
 
-class AnalysisWorker(QThread):
+class AnalysisWorker(threading.Thread):
     """分析工作线程"""
-    progress_updated = pyqtSignal(str)
-    analysis_completed = pyqtSignal(dict)
-    error_occurred = pyqtSignal(str)
     
-    def __init__(self, config):
+    def __init__(self, config, progress_callback, completed_callback, error_callback):
         super().__init__()
         self.config = config
+        self.progress_callback = progress_callback
+        self.completed_callback = completed_callback
+        self.error_callback = error_callback
+        self.daemon = True
         
     def run(self):
         try:
@@ -235,14 +233,14 @@ class AnalysisWorker(QThread):
             
             # 确保选择的模型可用
             print(f"正在检查模型: {self.config['model']}")
-            if not ensure_ollama_and_model(self.config['model']):
-                error_msg = f"无法准备模型 {self.config['model']}，请检查模型是否正确安装"
-                print(f"ERROR: {error_msg}")
-                self.error_occurred.emit(error_msg)
-                return
+            #if not ensure_ollama_and_model(self.config['model']):
+            #    error_msg = f"无法准备模型 {self.config['model']}，请检查模型是否正确安装"
+            #    print(f"ERROR: {error_msg}")
+            #    self.error_callback(error_msg)
+            #    return
             
-            print("SUCCESS: 模型准备完成")
-            self.progress_updated.emit("模型准备完成，开始分析...")
+            #print("SUCCESS: 模型准备完成")
+            #self.progress_callback("模型准备完成，开始分析...")
             
             # 准备参数
             portfolio = {
@@ -263,7 +261,7 @@ class AnalysisWorker(QThread):
                 if analysis:
                     progress_text += f" - {analysis[:100]}{'...' if len(analysis) > 100 else ''}"
                 print(f"PROGRESS: {progress_text}")
-                self.progress_updated.emit(progress_text)
+                self.progress_callback(progress_text)
             
             # 注册进度处理器
             print("注册进度处理器")
@@ -298,7 +296,7 @@ class AnalysisWorker(QThread):
                 else:
                     print(f"WARNING: 结果不是字典类型: {result}")
                 
-                self.analysis_completed.emit(result)
+                self.completed_callback(result)
                 
             finally:
                 # 取消注册进度处理器
@@ -310,14 +308,13 @@ class AnalysisWorker(QThread):
             print(f"ERROR: {error_msg}")
             import traceback
             print(f"错误堆栈: {traceback.format_exc()}")
-            self.error_occurred.emit(error_msg)
+            self.error_callback(error_msg)
 
 
-class AIHedgeFundGUI(QMainWindow):
+class AIHedgeFundGUI:
     """AI基金大师GUI主窗口"""
     
     def __init__(self):
-        super().__init__()
         self.config_file = "gui_config.json"
         self.current_html_content = None
         self.current_result_data = None
@@ -350,85 +347,41 @@ class AIHedgeFundGUI(QMainWindow):
         
     def init_ui(self):
         """初始化用户界面"""
-        self.setWindowTitle("AI基金大师投资分析系统 v2.0 - 267278466@qq.com")
-        self.setGeometry(100, 100, 1000, 700)
+        self.root = tk.Tk()
+        self.root.title("AI基金大师投资分析系统  v2.0 - 267278466@qq.com")
+        
+        # 设置窗口大小和位置（居中显示）
+        window_width = 800
+        window_height = 540  # 增加窗口高度以容纳固定高度的notebook
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        x = (screen_width - window_width) // 2
+        y = (screen_height - window_height) // 2
+        self.root.geometry(f"{window_width}x{window_height}+{x}+{y}")
+        self.root.minsize(800, 540)  # 设置最小尺寸
         
         # 设置窗口图标
         try:
-            self.setWindowIcon(QIcon("mrcai.ico"))
+            self.root.iconbitmap("mrcai.ico")
         except Exception as e:
             print(f"设置图标失败: {e}")
         
-        # 设置应用样式
-        self.setStyleSheet("""
-            QMainWindow {
-                background-color: #f0f0f0;
-            }
-            QTabWidget::pane {
-                border: 1px solid #c0c0c0;
-                background-color: white;
-            }
-            QTabBar::tab {
-                background-color: #e0e0e0;
-                padding: 8px 16px;
-                margin-right: 2px;
-                border: 1px solid #c0c0c0;
-                border-bottom: none;
-            }
-            QTabBar::tab:selected {
-                background-color: white;
-                border-bottom: 1px solid white;
-            }
-            QGroupBox {
-                font-weight: bold;
-                border: 2px solid #c0c0c0;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-            QPushButton {
-                background-color: #e0e0e0;
-                border: 1px solid #c0c0c0;
-                padding: 6px 12px;
-                border-radius: 3px;
-            }
-            QPushButton:hover {
-                background-color: #d0d0d0;
-            }
-            QPushButton:pressed {
-                background-color: #c0c0c0;
-            }
-            QPushButton:disabled {
-                background-color: #f0f0f0;
-                color: #808080;
-            }
-        """)
-        
-        # 创建中央窗口部件
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        
-        # 创建主布局
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        # 创建主框架
+        main_frame = ttk.Frame(self.root)
+        main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 创建标题
-        title_label = QLabel(" AI基金大师投资分析系统")
-        title_label.setAlignment(Qt.AlignCenter)
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        main_layout.addWidget(title_label)
+        title_label = ttk.Label(main_frame, text="AI基金大师投资分析系统", 
+                               font=("Arial", 12, "bold"))
+        title_label.pack(pady=(0, 5))
         
-        # 创建标签页
-        self.tab_widget = QTabWidget()
-        main_layout.addWidget(self.tab_widget)
+        # 创建标签页容器框架，设置固定高度
+        notebook_container = ttk.Frame(main_frame)
+        notebook_container.pack(fill=tk.BOTH, expand=True)
+        
+        # 创建标签页，设置固定高度500
+        self.notebook = ttk.Notebook(notebook_container)
+        self.notebook.pack(fill=tk.BOTH, expand=False, pady=(0, 10))  # 底部留出空间给按钮
         
         # 创建各个标签页
         self.create_analysts_tab()
@@ -436,66 +389,65 @@ class AIHedgeFundGUI(QMainWindow):
         self.create_run_tab()
         self.create_results_tab()
         
-        # 创建底部按钮
-        self.create_bottom_buttons(main_layout)
+        # 创建底部按钮区域
+        self.create_bottom_buttons(main_frame)
         
     def create_analysts_tab(self):
         """创建分析师选择标签页"""
-        tab = QWidget()
-        self.tab_widget.addTab(tab, "🧠 分析师")
+        tab_frame = ttk.Frame(self.notebook)
+        self.notebook.add(tab_frame, text="分析师")
         
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        # 主容器 - 设置固定高度
+        main_container = ttk.Frame(tab_frame, height=400)
+        main_container.pack(fill=tk.BOTH, expand=False, padx=8, pady=8)
+        main_container.pack_propagate(False)  # 防止子组件改变父组件大小
         
         # 标题和统计
-        title_layout = QHBoxLayout()
-        title_label = QLabel("选择AI分析师")
-        title_font = QFont()
-        title_font.setPointSize(12)
-        title_font.setBold(True)
-        title_label.setFont(title_font)
-        title_layout.addWidget(title_label)
+        title_frame = ttk.Frame(main_container)
+        title_frame.pack(fill=tk.X, pady=(0, 10))
         
-        title_layout.addStretch()
+        title_label = ttk.Label(title_frame, text="选择AI分析师", 
+                               font=("Arial", 12, "bold"))
+        title_label.pack(side=tk.LEFT)
         
-        self.analysts_count_label = QLabel("已选择: 0/15")
-        title_layout.addWidget(self.analysts_count_label)
-        
-        layout.addLayout(title_layout)
+        self.analysts_count_label = ttk.Label(title_frame, text="已选择: 0/15")
+        self.analysts_count_label.pack(side=tk.RIGHT)
         
         # 快捷操作按钮
-        button_layout = QHBoxLayout()
+        button_frame = ttk.Frame(main_container)
+        button_frame.pack(fill=tk.X, pady=(0, 10))
         
-        select_all_btn = QPushButton("✅ 全选")
-        select_all_btn.clicked.connect(self.select_all_analysts)
-        button_layout.addWidget(select_all_btn)
+        ttk.Button(button_frame, text="全选", 
+                  command=self.select_all_analysts).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="全不选", 
+                  command=self.deselect_all_analysts).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(button_frame, text="推荐配置", 
+                  command=self.set_recommended_analysts).pack(side=tk.LEFT, padx=(0, 5))
         
-        deselect_all_btn = QPushButton("❌ 全不选")
-        deselect_all_btn.clicked.connect(self.deselect_all_analysts)
-        button_layout.addWidget(deselect_all_btn)
+        # 分析师选择区域（使用滚动框架）- 设置固定高度
+        canvas_frame = ttk.Frame(main_container, height=400)  # 设置固定高度
+        canvas_frame.pack(fill=tk.BOTH, expand=False)
+        canvas_frame.pack_propagate(False)
         
-        recommended_btn = QPushButton("⭐ 推荐配置")
-        recommended_btn.clicked.connect(self.set_recommended_analysts)
-        button_layout.addWidget(recommended_btn)
+        canvas = tk.Canvas(canvas_frame)
+        scrollbar = ttk.Scrollbar(canvas_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
         
-        button_layout.addStretch()
-        layout.addLayout(button_layout)
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
         
-        # 分析师选择区域
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setMinimumHeight(400)
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
         
-        scroll_widget = QWidget()
-        scroll_layout = QVBoxLayout(scroll_widget)
+        # 投资大师分组
+        masters_group = ttk.LabelFrame(scrollable_frame, text="投资大师")
+        masters_group.pack(fill=tk.X, pady=(0, 10), padx=5)
         
-        # 第一行分组
-        row1_group = QGroupBox("💼 投资大师")
-        row1_layout = QGridLayout(row1_group)
-        
-        # 技术分析师分组
-        tech_group = QGroupBox("📊 专业分析师")
-        tech_layout = QGridLayout(tech_group)
+        # 专业分析师分组
+        analysts_group = ttk.LabelFrame(scrollable_frame, text="专业分析师")
+        analysts_group.pack(fill=tk.X, pady=(0, 10), padx=5)
         
         # 创建分析师复选框
         self.analyst_checkboxes = {}
@@ -503,190 +455,187 @@ class AIHedgeFundGUI(QMainWindow):
         # 投资大师（前10个）
         master_analysts = list(self.analyst_configs.items())[:10]
         for i, (key, name) in enumerate(master_analysts):
-            checkbox = QCheckBox(name)
-            checkbox.setChecked(True)  # 默认选中
-            checkbox.stateChanged.connect(self.update_analysts_count)
-            self.analyst_checkboxes[key] = checkbox
-            row1_layout.addWidget(checkbox, i // 2, i % 2)
+            var = tk.BooleanVar(value=True)  # 默认选中
+            checkbox = ttk.Checkbutton(masters_group, text=name, variable=var,
+                                     command=self.update_analysts_count)
+            checkbox.grid(row=i//2, column=i%2, sticky="w", padx=5, pady=2)
+            self.analyst_checkboxes[key] = var
         
         # 专业分析师（后5个）
         tech_analysts = list(self.analyst_configs.items())[10:]
         for i, (key, name) in enumerate(tech_analysts):
-            checkbox = QCheckBox(name)
-            checkbox.setChecked(True)  # 默认选中
-            checkbox.stateChanged.connect(self.update_analysts_count)
-            self.analyst_checkboxes[key] = checkbox
-            tech_layout.addWidget(checkbox, i // 2, i % 2)
+            var = tk.BooleanVar(value=True)  # 默认选中
+            checkbox = ttk.Checkbutton(analysts_group, text=name, variable=var,
+                                     command=self.update_analysts_count)
+            checkbox.grid(row=i//2, column=i%2, sticky="w", padx=5, pady=2)
+            self.analyst_checkboxes[key] = var
         
-        scroll_layout.addWidget(row1_group)
-        scroll_layout.addWidget(tech_group)
-        scroll_layout.addStretch()
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
-        scroll_area.setWidget(scroll_widget)
-        layout.addWidget(scroll_area)
+        # 更新初始计数
+        self.update_analysts_count()
         
     def create_config_tab(self):
         """创建配置标签页"""
-        tab = QWidget()
-        self.tab_widget.addTab(tab, "⚙️ 配置")
+        tab_frame = ttk.Frame(self.notebook)
+        self.notebook.add(tab_frame, text="配置")
         
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        # 主容器 - 设置固定高度
+        main_container = ttk.Frame(tab_frame, height=400)
+        main_container.pack(fill=tk.BOTH, expand=False, padx=8, pady=8)
+        main_container.pack_propagate(False)  # 防止子组件改变父组件大小
+        
+        # 创建滚动框架来容纳所有配置项
+        canvas = tk.Canvas(main_container)
+        scrollbar = ttk.Scrollbar(main_container, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas)
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
         
         # Ollama模型配置
-        ollama_group = QGroupBox("🤖 Ollama模型配置")
-        ollama_layout = QVBoxLayout(ollama_group)
+        ollama_group = ttk.LabelFrame(scrollable_frame, text="Ollama模型配置")
+        ollama_group.pack(fill=tk.X, pady=(0, 10))
         
         # Ollama状态
-        self.ollama_status_label = QLabel("正在检查Ollama状态...")
-        ollama_layout.addWidget(self.ollama_status_label)
+        self.ollama_status_label = ttk.Label(ollama_group, text="正在检查Ollama状态...")
+        self.ollama_status_label.pack(pady=5, anchor="w")
         
         # Ollama按钮
-        ollama_btn_layout = QHBoxLayout()
+        ollama_btn_frame = ttk.Frame(ollama_group)
+        ollama_btn_frame.pack(fill=tk.X, pady=5)
         
-        check_status_btn = QPushButton("🔄 检查状态")
-        check_status_btn.clicked.connect(self.check_ollama_status)
-        ollama_btn_layout.addWidget(check_status_btn)
-        
-        start_ollama_btn = QPushButton("▶️ 启动Ollama")
-        start_ollama_btn.clicked.connect(self.start_ollama)
-        ollama_btn_layout.addWidget(start_ollama_btn)
-        
-        ollama_btn_layout.addStretch()
-        ollama_layout.addLayout(ollama_btn_layout)
+        ttk.Button(ollama_btn_frame, text="检查状态", 
+                  command=self.check_ollama_status).pack(side=tk.LEFT, padx=(5, 5))
+        ttk.Button(ollama_btn_frame, text="启动Ollama", 
+                  command=self.start_ollama).pack(side=tk.LEFT, padx=(0, 5))
         
         # 模型选择
-        model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("选择模型:"))
+        model_frame = ttk.Frame(ollama_group)
+        model_frame.pack(fill=tk.X, pady=5)
         
-        self.model_combo = QComboBox()
-        self.model_combo.setMinimumWidth(200)
-        model_layout.addWidget(self.model_combo)
-        model_layout.addStretch()
-        
-        ollama_layout.addLayout(model_layout)
-        layout.addWidget(ollama_group)
+        ttk.Label(model_frame, text="选择模型:").pack(side=tk.LEFT, padx=(5, 5))
+        self.model_combo = ttk.Combobox(model_frame, width=30)
+        self.model_combo.pack(side=tk.LEFT, padx=(0, 5))
         
         # 交易参数
-        trading_group = QGroupBox("💰 交易参数")
-        trading_layout = QGridLayout(trading_group)
+        trading_group = ttk.LabelFrame(scrollable_frame, text="交易参数")
+        trading_group.pack(fill=tk.X, pady=(0, 10))
         
         # 股票代码
-        trading_layout.addWidget(QLabel("股票代码:"), 0, 0)
-        self.tickers_edit = QLineEdit("AAPL,GOOGL,MSFT,TSLA,AMZN")
-        self.tickers_edit.setPlaceholderText("输入股票代码，用逗号分隔")
-        trading_layout.addWidget(self.tickers_edit, 0, 1, 1, 2)
+        ticker_frame = ttk.Frame(trading_group)
+        ticker_frame.pack(fill=tk.X, pady=5)
+        ttk.Label(ticker_frame, text="股票代码:", width=12).pack(side=tk.LEFT, padx=(5, 5))
+        self.tickers_entry = ttk.Entry(ticker_frame)
+        self.tickers_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.tickers_entry.insert(0, "AAPL,GOOGL,MSFT,TSLA,AMZN")
         
         # 日期范围
-        trading_layout.addWidget(QLabel("开始日期:"), 1, 0)
-        self.start_date_edit = QDateEdit()
-        self.start_date_edit.setDate(QDate.currentDate().addMonths(-3))
-        self.start_date_edit.setCalendarPopup(True)
-        trading_layout.addWidget(self.start_date_edit, 1, 1)
+        date_frame = ttk.Frame(trading_group)
+        date_frame.pack(fill=tk.X, pady=5)
         
-        trading_layout.addWidget(QLabel("结束日期:"), 1, 2)
-        self.end_date_edit = QDateEdit()
-        self.end_date_edit.setDate(QDate.currentDate())
-        self.end_date_edit.setCalendarPopup(True)
-        trading_layout.addWidget(self.end_date_edit, 1, 3)
+        ttk.Label(date_frame, text="开始日期:", width=12).pack(side=tk.LEFT, padx=(5, 5))
+        self.start_date_entry = DateEntry(date_frame, width=12, background='darkblue',
+                                         foreground='white', borderwidth=2,
+                                         date_pattern='yyyy-mm-dd')
+        self.start_date_entry.pack(side=tk.LEFT, padx=(0, 10))
+        self.start_date_entry.set_date(datetime.now() - timedelta(days=90))
+        
+        ttk.Label(date_frame, text="结束日期:", width=12).pack(side=tk.LEFT, padx=(5, 5))
+        self.end_date_entry = DateEntry(date_frame, width=12, background='darkblue',
+                                       foreground='white', borderwidth=2,
+                                       date_pattern='yyyy-mm-dd')
+        self.end_date_entry.pack(side=tk.LEFT, padx=(0, 5))
+        self.end_date_entry.set_date(datetime.now())
         
         # 资金配置
-        trading_layout.addWidget(QLabel("初始资金:"), 2, 0)
-        self.initial_cash_edit = QLineEdit("100000.0")
-        trading_layout.addWidget(self.initial_cash_edit, 2, 1)
+        money_frame = ttk.Frame(trading_group)
+        money_frame.pack(fill=tk.X, pady=5)
         
-        trading_layout.addWidget(QLabel("保证金要求:"), 2, 2)
-        self.margin_edit = QLineEdit("0.0")
-        trading_layout.addWidget(self.margin_edit, 2, 3)
+        ttk.Label(money_frame, text="初始资金:", width=12).pack(side=tk.LEFT, padx=(5, 5))
+        self.initial_cash_entry = ttk.Entry(money_frame, width=15)
+        self.initial_cash_entry.pack(side=tk.LEFT, padx=(0, 10))
+        self.initial_cash_entry.insert(0, "100000.0")
         
-        layout.addWidget(trading_group)
+        ttk.Label(money_frame, text="保证金要求:", width=12).pack(side=tk.LEFT, padx=(5, 5))
+        self.margin_entry = ttk.Entry(money_frame, width=15)
+        self.margin_entry.pack(side=tk.LEFT, padx=(0, 5))
+        self.margin_entry.insert(0, "0.0")
         
         # 分析选项
-        options_group = QGroupBox("🔧 分析选项")
-        options_layout = QVBoxLayout(options_group)
+        options_group = ttk.LabelFrame(scrollable_frame, text="分析选项")
+        options_group.pack(fill=tk.X, pady=(0, 10))
         
-        self.show_reasoning_checkbox = QCheckBox("显示详细分析推理过程")
-        self.show_reasoning_checkbox.setChecked(True)
-        options_layout.addWidget(self.show_reasoning_checkbox)
+        self.show_reasoning_var = tk.BooleanVar(value=True)
+        ttk.Checkbutton(options_group, text="显示详细分析推理过程", 
+                       variable=self.show_reasoning_var).pack(pady=5, padx=5, anchor="w")
         
-        layout.addWidget(options_group)
-        
-        layout.addStretch()
+        # 配置滚动条
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
         
     def create_run_tab(self):
         """创建运行标签页"""
-        tab = QWidget()
-        self.tab_widget.addTab(tab, "▶️ 运行")
+        tab_frame = ttk.Frame(self.notebook)
+        self.notebook.add(tab_frame, text="运行")
         
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        # 主容器 - 设置固定高度
+        main_container = ttk.Frame(tab_frame, height=400)
+        main_container.pack(fill=tk.BOTH, expand=False, padx=8, pady=8)
+        main_container.pack_propagate(False)  # 防止子组件改变父组件大小
         
         # 分析控制台
-        control_group = QGroupBox("🎮 分析控制台")
-        control_layout = QVBoxLayout(control_group)
+        control_group = ttk.LabelFrame(main_container, text="分析控制台")
+        control_group.pack(fill=tk.X, pady=(0, 10))
         
-        # 按钮区域
-        button_layout = QHBoxLayout()
+        # 按钮和状态区域
+        control_frame = ttk.Frame(control_group)
+        control_frame.pack(fill=tk.X, pady=5)
         
-        self.run_button = QPushButton("▶️ 开始分析")
-        self.run_button.clicked.connect(self.run_analysis)
-        button_layout.addWidget(self.run_button)
+        # 按钮
+        button_frame = ttk.Frame(control_frame)
+        button_frame.pack(side=tk.LEFT)
         
-        self.stop_button = QPushButton("⏹️ 停止分析")
-        self.stop_button.clicked.connect(self.stop_analysis)
-        self.stop_button.setEnabled(False)
-        button_layout.addWidget(self.stop_button)
+        self.run_button = ttk.Button(button_frame, text="开始分析", 
+                                    command=self.run_analysis)
+        self.run_button.pack(side=tk.LEFT, padx=(5, 5))
         
-        button_layout.addStretch()
+        self.stop_button = ttk.Button(button_frame, text="停止分析", 
+                                     command=self.stop_analysis, state="disabled")
+        self.stop_button.pack(side=tk.LEFT, padx=(0, 5))
         
         # 状态信息
-        status_layout = QHBoxLayout()
-        status_layout.addWidget(QLabel("分析状态:"))
+        status_frame = ttk.Frame(control_frame)
+        status_frame.pack(side=tk.RIGHT)
         
-        self.status_label = QLabel("准备就绪")
-        self.status_label.setStyleSheet("font-weight: bold;")
-        status_layout.addWidget(self.status_label)
-        status_layout.addStretch()
-        
-        button_layout.addLayout(status_layout)
-        control_layout.addLayout(button_layout)
+        ttk.Label(status_frame, text="分析状态:").pack(side=tk.LEFT, padx=(5, 5))
+        self.status_label = ttk.Label(status_frame, text="准备就绪", 
+                                     font=("Arial", 9, "bold"))
+        self.status_label.pack(side=tk.LEFT)
         
         # 进度条
-        progress_layout = QHBoxLayout()
-        progress_layout.addWidget(QLabel("进度:"))
+        progress_frame = ttk.Frame(control_group)
+        progress_frame.pack(fill=tk.X, pady=5)
         
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setRange(0, 100)
-        progress_layout.addWidget(self.progress_bar)
+        ttk.Label(progress_frame, text="进度:").pack(side=tk.LEFT, padx=(5, 5))
+        self.progress_bar = ttk.Progressbar(progress_frame, mode='indeterminate')
+        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
         
-        control_layout.addLayout(progress_layout)
-        layout.addWidget(control_group)
+        # 输出区域 - 设置固定高度
+        output_group = ttk.LabelFrame(main_container, text="实时分析日志")
+        output_group.pack(fill=tk.BOTH, expand=True)
         
-        # 输出区域
-        output_group = QGroupBox("📊 实时分析日志")
-        output_layout = QVBoxLayout(output_group)
-        
-        self.output_text = QTextEdit()
-        # 设置等宽字体，添加回退选项和错误处理
-        try:
-            output_font = QFont()
-            output_font.setFamily("Consolas")
-            output_font.setPointSize(9)
-            # 如果Consolas不可用，Qt会自动选择系统默认等宽字体
-            output_font.setStyleHint(QFont.Monospace)
-            self.output_text.setFont(output_font)
-        except Exception as e:
-            print(f"设置输出文本字体失败: {e}")
-            # 使用系统默认字体
-            self.output_text.setFont(QFont())
-        self.output_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #1e1e1e;
-                color: #d4d4d4;
-                border: 1px solid #c0c0c0;
-            }
-        """)
-        output_layout.addWidget(self.output_text)
+        self.output_text = scrolledtext.ScrolledText(output_group, 
+                                                    font=("Consolas", 9),
+                                                    bg="#1e1e1e", fg="#d4d4d4",
+                                                    insertbackground="white")
+        self.output_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 设置stdout重定向，将print输出同时显示在GUI和终端
         self.output_redirector = OutputRedirector(self.output_text, self.original_stdout)
@@ -697,554 +646,404 @@ class AIHedgeFundGUI(QMainWindow):
         print(f"GUI初始化完成，时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print("所有print输出将同时显示在终端和GUI中")
         
-        layout.addWidget(output_group)
-        
     def create_results_tab(self):
         """创建结果标签页"""
-        tab = QWidget()
-        self.tab_widget.addTab(tab, "📊 结果")
+        tab_frame = ttk.Frame(self.notebook)
+        self.notebook.add(tab_frame, text="结果")
         
-        layout = QVBoxLayout(tab)
-        layout.setContentsMargins(15, 15, 15, 15)
+        # 主容器 - 设置固定高度
+        main_container = ttk.Frame(tab_frame, height=400)
+        main_container.pack(fill=tk.BOTH, expand=False, padx=8, pady=8)
+        main_container.pack_propagate(False)  # 防止子组件改变父组件大小
         
         # 结果控制区域
-        control_layout = QHBoxLayout()
+        control_frame = ttk.Frame(main_container)
+        control_frame.pack(fill=tk.X, pady=(0, 10))
         
-        browser_btn = QPushButton("🌐 浏览器查看")
-        browser_btn.clicked.connect(self.open_html_in_browser)
-        control_layout.addWidget(browser_btn)
+        ttk.Button(control_frame, text="浏览器查看", 
+                  command=self.open_html_in_browser).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(control_frame, text="保存报告", 
+                  command=self.save_results).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(control_frame, text="保存HTML", 
+                  command=self.save_html_report).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Button(control_frame, text="清空", 
+                  command=self.clear_results).pack(side=tk.LEFT, padx=(0, 5))
         
-        save_btn = QPushButton("💾 保存报告")
-        save_btn.clicked.connect(self.save_results)
-        control_layout.addWidget(save_btn)
-        
-        save_html_btn = QPushButton("📄 保存HTML")
-        save_html_btn.clicked.connect(self.save_html_report)
-        control_layout.addWidget(save_html_btn)
-        
-        clear_btn = QPushButton("🗑️ 清空")
-        clear_btn.clicked.connect(self.clear_results)
-        control_layout.addWidget(clear_btn)
-        
-        control_layout.addStretch()
-        layout.addLayout(control_layout)
-        
-        # 结果显示区域
-        results_tab_widget = QTabWidget()
+        # 结果显示区域 - 设置固定高度
+        results_notebook = ttk.Notebook(main_container)
+        results_notebook.pack(fill=tk.BOTH, expand=True)
         
         # HTML报告标签页
-        html_tab = QWidget()
-        results_tab_widget.addTab(html_tab, "📊 精美报告")
+        html_frame = ttk.Frame(results_notebook)
+        results_notebook.add(html_frame, text="精美报告")
         
-        html_layout = QVBoxLayout(html_tab)
-        html_group = QGroupBox("分析报告预览")
-        html_group_layout = QVBoxLayout(html_group)
+        html_group = ttk.LabelFrame(html_frame, text="分析报告预览")
+        html_group.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        self.html_preview = QTextEdit()
-        # 设置中文字体，添加回退选项和错误处理
-        try:
-            preview_font = QFont()
-            preview_font.setFamily("Microsoft YaHei")
-            preview_font.setPointSize(10)
-            # 如果Microsoft YaHei不可用，Qt会自动选择系统默认字体
-            preview_font.setStyleHint(QFont.SansSerif)
-            self.html_preview.setFont(preview_font)
-        except Exception as e:
-            print(f"设置HTML预览字体失败: {e}")
-            # 使用系统默认字体
-            self.html_preview.setFont(QFont())
-        self.html_preview.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fa;
-                border: none;
-            }
-        """)
-        html_group_layout.addWidget(self.html_preview)
-        html_layout.addWidget(html_group)
+        self.html_preview = scrolledtext.ScrolledText(html_group, 
+                                                     font=("Microsoft YaHei", 10),
+                                                     bg="#f8f9fa")
+        self.html_preview.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 原始数据标签页
-        raw_tab = QWidget()
-        results_tab_widget.addTab(raw_tab, "📋 详细数据")
+        raw_frame = ttk.Frame(results_notebook)
+        results_notebook.add(raw_frame, text="详细数据")
         
-        raw_layout = QVBoxLayout(raw_tab)
-        raw_group = QGroupBox("原始分析数据")
-        raw_group_layout = QVBoxLayout(raw_group)
+        raw_group = ttk.LabelFrame(raw_frame, text="原始分析数据")
+        raw_group.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        self.results_text = QTextEdit()
-        # 设置等宽字体，添加回退选项和错误处理
-        try:
-            results_font = QFont()
-            results_font.setFamily("Consolas")
-            results_font.setPointSize(9)
-            # 如果Consolas不可用，Qt会自动选择系统默认等宽字体
-            results_font.setStyleHint(QFont.Monospace)
-            self.results_text.setFont(results_font)
-        except Exception as e:
-            print(f"设置结果文本字体失败: {e}")
-            # 使用系统默认字体
-            self.results_text.setFont(QFont())
-        raw_group_layout.addWidget(self.results_text)
-        raw_layout.addWidget(raw_group)
+        self.results_text = scrolledtext.ScrolledText(raw_group, 
+                                                     font=("Consolas", 9))
+        self.results_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        layout.addWidget(results_tab_widget)
-        
-    def create_bottom_buttons(self, main_layout):
+    def create_bottom_buttons(self, parent):
         """创建底部按钮区域"""
-        bottom_layout = QHBoxLayout()
+        bottom_frame = ttk.Frame(parent)
+        bottom_frame.pack(fill=tk.X, pady=(0, 5))  # 减少顶部间距，增加底部间距
         
-        # 左下角添加GitHub链接
-        github_label = QLabel('<a href="https://github.com/hengruiyun" style="color: #0066cc; text-decoration: none;">HengruiYun</a>')
-        github_label.setOpenExternalLinks(True)
-        github_label.setStyleSheet("QLabel { font-size: 12px; color: #666; }")
-        bottom_layout.addWidget(github_label)
+        # 创建一个内部框架来容纳按钮，并设置固定高度
+        button_container = ttk.Frame(bottom_frame, height=40)  # 设置固定高度
+        button_container.pack(fill=tk.X)
+        button_container.pack_propagate(False)  # 防止子组件改变父组件大小
         
-        bottom_layout.addStretch()
+        # 退出按钮 - 放在右侧
+        ttk.Button(button_container, text="退出", 
+                   command=self.root.quit).pack(side=tk.RIGHT, padx=(10, 5))
         
-        # 开始分析按钮
-        self.bottom_run_button = QPushButton("开始分析")
-        self.bottom_run_button.clicked.connect(self.run_analysis)
-        bottom_layout.addWidget(self.bottom_run_button)
+        # 开始分析按钮 - 放在退出按钮左边
+        self.bottom_run_button = ttk.Button(button_container, text="开始分析", 
+                                           command=self.run_analysis)
+        self.bottom_run_button.pack(side=tk.RIGHT, padx=(5, 10))
         
-        # 退出按钮
-        exit_button = QPushButton("退出")
-        exit_button.clicked.connect(self.close)
-        bottom_layout.addWidget(exit_button)
+    def update_analysts_count(self):
+        """更新分析师选择计数"""
+        selected_count = sum(1 for var in self.analyst_checkboxes.values() if var.get())
+        total_count = len(self.analyst_checkboxes)
+        self.analysts_count_label.config(text=f"已选择: {selected_count}/{total_count}")
         
-        main_layout.addLayout(bottom_layout)
-        
-    def check_ollama_status(self):
-        """检查Ollama状态"""
-        print("正在检查Ollama状态...")
-        try:
-            installed = is_ollama_installed()
-            print(f"Ollama安装状态: {installed}")
-            running = is_ollama_server_running() if installed else False
-            print(f"Ollama运行状态: {running}")
-            models = get_locally_available_models() if running else []
-            print(f"可用模型数量: {len(models)}")
-            
-            self.update_ollama_status(installed, running, models)
-        except Exception as e:
-            print(f"检查Ollama状态时出错: {e}")
-            self.update_ollama_status(False, False, [], str(e))
-            
-    def update_ollama_status(self, installed, running, models, error=None):
-        """更新Ollama状态显示"""
-        if error:
-            status_text = f"Ollama状态检查失败: {error}"
-        elif not installed:
-            status_text = "Ollama未安装 - 请先安装Ollama"
-        elif not running:
-            status_text = "Ollama已安装但未运行"
-        else:
-            status_text = f"Ollama正在运行 - 可用模型: {len(models)}个"
-            
-        self.ollama_status_label.setText(status_text)
-        
-        # 更新模型选择框
-        self.model_combo.clear()
-        if models:
-            self.model_combo.addItems(models)
-            
-    def start_ollama(self):
-        """启动Ollama服务"""
-        try:
-            print("正在启动Ollama服务...")
-            self.ollama_status_label.setText("正在启动Ollama服务...")
-            success = start_ollama_server()
-            if success:
-                print("SUCCESS: Ollama服务启动成功")
-                self.ollama_status_label.setText("Ollama服务启动成功")
-                QTimer.singleShot(2000, self.check_ollama_status)
-            else:
-                print("ERROR: Ollama服务启动失败")
-                self.ollama_status_label.setText("Ollama服务启动失败")
-        except Exception as e:
-            print(f"ERROR: 启动Ollama服务时出错: {e}")
-            self.ollama_status_label.setText(f"启动失败: {str(e)}")
-            
     def select_all_analysts(self):
-        """全选分析师"""
-        for checkbox in self.analyst_checkboxes.values():
-            checkbox.setChecked(True)
+        """选择所有分析师"""
+        for var in self.analyst_checkboxes.values():
+            var.set(True)
         self.update_analysts_count()
         
     def deselect_all_analysts(self):
-        """取消全选分析师"""
-        for checkbox in self.analyst_checkboxes.values():
-            checkbox.setChecked(False)
+        """取消选择所有分析师"""
+        for var in self.analyst_checkboxes.values():
+            var.set(False)
         self.update_analysts_count()
         
     def set_recommended_analysts(self):
         """设置推荐的分析师配置"""
-        recommended = {
-            "warren_buffett": True,
-            "charlie_munger": True, 
-            "peter_lynch": True,
-            "michael_burry": True,
-            "aswath_damodaran": True,
-            "technical_analyst": True,
-            "phil_fisher": False,
-            "ben_graham": False,
-            "bill_ackman": False,
-            "cathie_wood": False,
-            "stanley_druckenmiller": False,
-            "rakesh_jhunjhunwala": False
-        }
+        recommended = [
+            "warren_buffett", "charlie_munger", "peter_lynch", 
+            "michael_burry", "aswath_damodaran", "technical_analyst"
+        ]
         
-        for key, value in recommended.items():
-            if key in self.analyst_checkboxes:
-                self.analyst_checkboxes[key].setChecked(value)
+        for key, var in self.analyst_checkboxes.items():
+            var.set(key in recommended)
         self.update_analysts_count()
         
-    def update_analysts_count(self):
-        """更新分析师选择计数"""
-        selected = sum(1 for checkbox in self.analyst_checkboxes.values() if checkbox.isChecked())
-        total = len(self.analyst_checkboxes)
-        self.analysts_count_label.setText(f"已选择: {selected}/{total}")
+    def check_ollama_status(self):
+        """检查Ollama状态"""
+        def check_status():
+            try:
+                print("正在检查Ollama状态")
+                
+                # 使用OllamaChecker检查状态
+                checker = OllamaChecker("qwen3:0.6b")
+                
+                # 检查安装状态
+                installed = checker.find_ollama_exe()
+                print(f"Ollama安装状态: {installed}")
+                
+                if not installed:
+                    self.root.after(0, lambda: self.ollama_status_label.config(
+                        text="Ollama未安装，请先安装Ollama", foreground="red"))
+                    return
+                
+                # 检查运行状态
+                process_running = checker.check_ollama_process()
+                service_ready = checker.check_ollama_service()
+                print(f"Ollama进程运行状态: {process_running}")
+                print(f"Ollama服务就绪状态: {service_ready}")
+                
+                if not process_running:
+                    self.root.after(0, lambda: self.ollama_status_label.config(
+                        text="Ollama已安装但未运行，请启动服务", foreground="orange"))
+                    return
+                elif not service_ready:
+                    self.root.after(0, lambda: self.ollama_status_label.config(
+                        text="Ollama进程运行中，服务正在初始化...", foreground="orange"))
+                    return
+                
+                # 获取可用模型
+                models = get_locally_available_models()
+                print(f"可用模型数量: {len(models)}")
+                
+                if models:
+                    # models已经是字符串列表，直接使用
+                    self.root.after(0, lambda: self.update_model_list(models))
+                    self.root.after(0, lambda: self.ollama_status_label.config(
+                        text=f"Ollama运行正常，发现{len(models)}个模型", foreground="green"))
+                else:
+                    self.root.after(0, lambda: self.ollama_status_label.config(
+                        text="Ollama运行正常，但没有可用模型", foreground="orange"))
+                    
+            except Exception as e:
+                error_msg = str(e)
+                print(f"检查Ollama状态时出错: {error_msg}")
+                self.root.after(0, lambda: self.ollama_status_label.config(
+                    text=f"检查状态失败: {error_msg}", foreground="red"))
         
-    def get_selected_analysts(self):
-        """获取选中的分析师"""
-        return [key for key, checkbox in self.analyst_checkboxes.items() if checkbox.isChecked()]
+        # 在后台线程中检查状态
+        threading.Thread(target=check_status, daemon=True).start()
+        
+    def update_model_list(self, models):
+        """更新模型列表"""
+        self.model_combo['values'] = models
+        if models:
+            self.model_combo.current(0)
+            
+    def start_ollama(self):
+        """启动Ollama服务"""
+        def start_service():
+            try:
+                print("正在启动Ollama服务...")
+                self.root.after(0, lambda: self.ollama_status_label.config(
+                    text="正在启动Ollama服务...", foreground="blue"))
+                
+                # 使用OllamaChecker启动服务
+                checker = OllamaChecker("qwen3:0.6b")
+                success = checker.start_ollama_serve()
+                
+                if success:
+                    print("Ollama服务启动成功")
+                    self.root.after(0, lambda: self.ollama_status_label.config(
+                        text="Ollama服务启动成功", foreground="green"))
+                    # 重新检查状态
+                    self.root.after(2000, self.check_ollama_status)
+                else:
+                    print("Ollama服务启动失败")
+                    self.root.after(0, lambda: self.ollama_status_label.config(
+                        text="Ollama服务启动失败", foreground="red"))
+                    
+            except Exception as e:
+                error_msg = str(e)
+                print(f"启动Ollama服务时出错: {error_msg}")
+                self.root.after(0, lambda: self.ollama_status_label.config(
+                    text=f"启动失败: {error_msg}", foreground="red"))
+        
+        # 在后台线程中启动服务
+        threading.Thread(target=start_service, daemon=True).start()
         
     def run_analysis(self):
-        """运行AI基金大师分析"""
-        print("=== 用户点击开始分析 ===")
-        
-        # 验证输入
-        model_name = self.model_combo.currentText()
-        print(f"选择的模型: '{model_name}'")
-        if not model_name:
-            print("ERROR: 未选择模型")
-            QMessageBox.critical(self, "错误", "请先选择一个大模型")
-            return
+        """运行分析"""
+        try:
+            # 清空缓存
+            from src.data.cache import get_cache
+            cache = get_cache()
+            cache.clear_cache()
             
-        selected_analysts = self.get_selected_analysts()
-        print(f"选中的分析师: {selected_analysts}")
-        if not selected_analysts:
-            print("ERROR: 未选择分析师")
-            QMessageBox.critical(self, "错误", "请至少选择一个AI分析师")
-            return
+            # 切换到运行标签页
+            self.notebook.select(2)  # 运行标签页是第3个（索引2）
             
-        # 解析股票代码
-        import re
-        tickers_input = self.tickers_edit.text()
-        print(f"输入的股票代码: '{tickers_input}'")
-        tickers = [t.strip().upper() for t in re.split(r'[,;\s\t\n]+', tickers_input) if t.strip()]
-        print(f"解析后的股票代码: {tickers}")
-        if not tickers:
-            print("ERROR: 股票代码解析失败")
-            QMessageBox.critical(self, "错误", "请输入至少一个股票代码")
-            return
+            # 更新按钮状态
+            self.run_button.config(state="disabled")
+            self.bottom_run_button.config(state="disabled")
+            self.stop_button.config(state="normal")
             
-        # 检查股票数量限制
-        if len(tickers) > 4:
-            print(f"WARNING: 股票数量过多 ({len(tickers)} > 4)")
-            QMessageBox.warning(self, "股票数量限制", f"股票数量过多，最多支持4支股票。\n当前输入了{len(tickers)}支股票，请减少股票数量。")
-            return
+            # 清空输出
+            self.output_text.delete(1.0, tk.END)
             
-        print("开始准备分析环境...")
-        
-        # 清空数据缓存和上次分析内容
-        print("清空数据缓存和上次分析内容")
-        self.clear_analysis_cache()
-        
-        # 切换到运行标签页
-        print("切换到运行标签页")
-        self.tab_widget.setCurrentIndex(2)  # 运行标签页是第3个（索引为2）
-        
-        # 禁用运行按钮，启用停止按钮
-        print("更新UI状态")
-        self.run_button.setEnabled(False)
-        self.bottom_run_button.setEnabled(False)
-        self.stop_button.setEnabled(True)
-        self.progress_bar.setValue(0)
-        self.status_label.setText("正在运行...")
-        
-        # 清空输出
-        self.output_text.clear()
-        
-        # 清除API中断标志
-        print("清除API中断标志")
-        clear_api_interrupt()
-        
-        # 重置进度计数器
-        self.analysis_start_time = time.time()
-        self.total_analysts = len(selected_analysts)
-        self.completed_analysts = 0
-        print(f"分析师总数: {self.total_analysts}")
-        
-        # 准备配置
-        config = {
-            'model': self.model_combo.currentText(),
-            'tickers': tickers,
-            'start_date': self.start_date_edit.date().toString("yyyy-MM-dd"),
-            'end_date': self.end_date_edit.date().toString("yyyy-MM-dd"),
-            'initial_cash': self.initial_cash_edit.text(),
-            'margin': self.margin_edit.text(),
-            'show_reasoning': self.show_reasoning_checkbox.isChecked(),
-            'selected_analysts': selected_analysts
-        }
-        print(f"分析配置: {config}")
-        
-        # 启动分析工作线程
-        print("创建并启动分析工作线程")
-        self.analysis_worker = AnalysisWorker(config)
-        self.analysis_worker.progress_updated.connect(self.update_progress)
-        self.analysis_worker.analysis_completed.connect(self.show_results)
-        self.analysis_worker.error_occurred.connect(self.show_error)
-        self.analysis_worker.finished.connect(self.analysis_finished)
-        self.analysis_worker.start()
-        print("分析工作线程已启动")
-        
+            # 重置进度
+            self.progress_bar.config(mode='indeterminate')
+            self.progress_bar.start()
+            
+            # 准备分析配置
+            config = {
+                'model': self.model_combo.get(),
+                'tickers': [ticker.strip() for ticker in self.tickers_entry.get().split(',') if ticker.strip()],
+                'start_date': self.start_date_entry.get(),
+                'end_date': self.end_date_entry.get(),
+                'initial_cash': self.initial_cash_entry.get(),
+                'margin': self.margin_entry.get(),
+                'show_reasoning': self.show_reasoning_var.get(),
+                'selected_analysts': [key for key, var in self.analyst_checkboxes.items() if var.get()]
+            }
+            
+            print(f"开始分析，配置: {config}")
+            
+            # 记录开始时间
+            self.analysis_start_time = time.time()
+            self.total_analysts = len(config['selected_analysts'])
+            self.completed_analysts = 0
+            
+            # 更新状态
+            self.status_label.config(text="正在分析...")
+            
+            # 创建并启动分析工作线程
+            self.analysis_worker = AnalysisWorker(
+                config=config,
+                progress_callback=self.on_progress_update,
+                completed_callback=self.on_analysis_completed,
+                error_callback=self.on_analysis_error
+            )
+            self.analysis_worker.start()
+            
+        except Exception as e:
+            error_msg = f"启动分析时发生错误: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            messagebox.showerror("错误", error_msg)
+            self.on_analysis_error(error_msg)
+            
     def stop_analysis(self):
         """停止分析"""
-        set_api_interrupt()
-        self.status_label.setText("正在停止...")
-        
-        if self.analysis_worker and self.analysis_worker.isRunning():
-            self.analysis_worker.terminate()
-            self.analysis_worker.wait(2000)  # 等待最多2秒
+        try:
+            print("用户请求停止分析")
             
-        self.analysis_finished()
-        
-    def analysis_finished(self):
-        """分析完成后的清理工作"""
-        self.run_button.setEnabled(True)
-        self.bottom_run_button.setEnabled(True)
-        self.stop_button.setEnabled(False)
-        
-        # 设置进度条为100%
-        self.progress_bar.setValue(100)
-        
-        # 显示最终完成状态
-        if hasattr(self, 'analysis_start_time') and self.analysis_start_time:
-            total_time = time.time() - self.analysis_start_time
-            if total_time < 60:
-                time_str = f"{total_time:.0f}秒"
-            elif total_time < 3600:
-                time_str = f"{total_time/60:.1f}分钟"
-            else:
-                time_str = f"{total_time/3600:.1f}小时"
+            # 设置API中断标志
+            set_api_interrupt()
             
-            self.status_label.setText(f"分析完成 - 总耗时: {time_str}")
-        else:
-            self.status_label.setText("分析完成")
+            # 更新状态
+            self.status_label.config(text="正在停止...")
             
-    def update_progress(self, message):
-        """更新进度显示"""
-        self.output_text.append(message)
-        
-        # 更新进度百分比
-        if "Done" in message:
-            self.completed_analysts += 1
-            
-        if self.total_analysts > 0:
-            progress_percent = min(100, int((self.completed_analysts / self.total_analysts) * 100))
-            self.progress_bar.setValue(progress_percent)
-            
-            if hasattr(self, 'analysis_start_time') and self.analysis_start_time:
-                elapsed_time = time.time() - self.analysis_start_time
-                if elapsed_time < 60:
-                    time_str = f"{elapsed_time:.0f}秒"
-                elif elapsed_time < 3600:
-                    time_str = f"{elapsed_time/60:.1f}分钟"
-                else:
-                    time_str = f"{elapsed_time/3600:.1f}小时"
+            # 如果工作线程存在，等待其结束
+            if self.analysis_worker and self.analysis_worker.is_alive():
+                print("等待分析线程结束...")
+                # 给线程一些时间来响应中断
+                self.analysis_worker.join(timeout=5.0)
                 
-                self.status_label.setText(f"分析进行中... {progress_percent}% ({self.completed_analysts}/{self.total_analysts}) - {time_str}")
+                if self.analysis_worker.is_alive():
+                    print("WARNING: 分析线程未能及时结束")
             
-    def show_results(self, result):
-        """显示分析结果"""
-        self.tab_widget.setCurrentIndex(3)  # 切换到结果标签页
-        
-        # 添加类型检查和错误处理
-        if not isinstance(result, dict):
-            error_msg = f"接收到无效的结果类型: {type(result).__name__}，期望字典类型。结果内容: {str(result)[:200]}..."
-            self.html_preview.setPlainText(f"❌ 结果类型错误: {error_msg}")
-            self.results_text.setPlainText(f"❌ 结果类型错误: {error_msg}")
+            # 清除中断标志
+            clear_api_interrupt()
+            
+            # 恢复按钮状态
+            self.run_button.config(state="normal")
+            self.bottom_run_button.config(state="normal")
+            self.stop_button.config(state="disabled")
+            
+            # 停止进度条
+            self.progress_bar.stop()
+            
+            # 更新状态
+            self.status_label.config(text="已停止")
+            
+            print("分析已停止")
+            
+        except Exception as e:
+            error_msg = f"停止分析时发生错误: {str(e)}"
             print(f"ERROR: {error_msg}")
-            return
+            messagebox.showerror("错误", error_msg)
+            
+    def on_progress_update(self, message):
+        """处理进度更新"""
+        # 在主线程中更新UI
+        self.root.after(0, lambda: self._update_progress_ui(message))
         
-        # 存储结果数据
-        self.current_result_data = result
+    def _update_progress_ui(self, message):
+        """在主线程中更新进度UI"""
+        # 这里可以添加更详细的进度处理逻辑
+        pass
         
-        # 生成HTML报告
+    def on_analysis_completed(self, result):
+        """处理分析完成"""
+        # 在主线程中处理结果
+        self.root.after(0, lambda: self._handle_analysis_completed(result))
+        
+    def _handle_analysis_completed(self, result):
+        """在主线程中处理分析完成"""
         try:
-            self.current_html_content = generate_html_report(result)
-            # 显示HTML报告的文本预览版本
-            html_preview_text = self.convert_html_to_preview_text(result)
-            self.html_preview.setPlainText(html_preview_text)
-        except Exception as e:
-            self.html_preview.setPlainText(f"HTML报告生成失败: {str(e)}")
-        
-        # 格式化并显示原始结果数据
-        try:
-            formatted_result = format_trading_output(result)
-            self.results_text.setPlainText(formatted_result)
-        except Exception as e:
-            self.results_text.setPlainText(f"结果格式化失败: {str(e)}")
+            # 停止进度条
+            self.progress_bar.stop()
             
-        # 添加完成提示
-        QMessageBox.information(
-            self, "✅ 分析完成", 
-            "🎉 投资分析已成功完成！\n\n" +
-            "📊 请查看'分析结果'标签页获取详细报告\n" +
-            "🌐 点击'浏览器查看'按钮可查看完整HTML报告\n" +
-            "💾 可使用'保存结果'按钮保存分析报告"
-        )
+            # 恢复按钮状态
+            self.run_button.config(state="normal")
+            self.bottom_run_button.config(state="normal")
+            self.stop_button.config(state="disabled")
             
-    def convert_html_to_preview_text(self, result):
-        """将分析结果转换为可在Text控件中显示的预览文本"""
-        if not result:
-            return "❌ 没有可用的分析结果"
-        
-        preview_text = " AI基金大师投资分析报告\n"
-        preview_text += "=" * 50 + "\n\n"
-        
-        # 生成时间
-        current_time = datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
-        preview_text += f" 作者:267278466@qq.com \n"
-        preview_text += f"📅 生成时间: {current_time}\n\n"
-        
-        # 执行摘要
-        decisions = result.get("decisions", {})
-        if decisions:
-            preview_text += "📋 执行摘要\n"
-            preview_text += "-" * 30 + "\n"
+            # 计算分析时间
+            if self.analysis_start_time:
+                elapsed_time = time.time() - self.analysis_start_time
+                time_str = f"{elapsed_time:.1f}秒"
+            else:
+                time_str = "未知"
             
-            # 统计决策分布
-            action_counts = {"buy": 0, "sell": 0, "hold": 0, "short": 0, "cover": 0}
-            total_confidence = 0
-            total_decisions = len(decisions)
+            # 更新状态
+            self.status_label.config(text=f"分析完成 (耗时: {time_str})")
             
-            for decision in decisions.values():
-                action = decision.get("action", "hold").lower()
-                if action in action_counts:
-                    action_counts[action] += 1
-                confidence = decision.get("confidence", 0)
-                total_confidence += confidence
+            print(f"=== 分析完成，耗时: {time_str} ===")
             
-            avg_confidence = total_confidence / total_decisions if total_decisions > 0 else 0
+            # 保存结果数据
+            self.current_result_data = result
             
-            preview_text += f"📊 分析股票数量: {total_decisions}\n"
-            preview_text += f"📈 买入建议: {action_counts['buy']}\n"
-            preview_text += f"📉 卖出建议: {action_counts['sell']}\n"
-            preview_text += f"⏸️  持有建议: {action_counts['hold']}\n"
-            preview_text += f"🎯 平均信心度: {avg_confidence:.1f}%\n\n"
-        
-        # 投资决策详情
-        if decisions:
-            preview_text += "💰 投资决策详情\n"
-            preview_text += "-" * 30 + "\n"
-            
-            for ticker, decision in decisions.items():
-                action = decision.get("action", "hold").lower()
-                quantity = decision.get("quantity", 0)
-                confidence = decision.get("confidence", 0)
-                reasoning = decision.get("reasoning", "无详细说明")
-                
-                # 获取动作的中文描述
-                action_map = {
-                    "buy": "买入",
-                    "sell": "卖出", 
-                    "hold": "持有",
-                    "short": "做空",
-                    "cover": "平仓"
-                }
-                action_text = action_map.get(action, action)
-                
-                preview_text += f"\n📈 {ticker} - {action_text}\n"
-                preview_text += f"   交易数量: {quantity:,} 股\n"
-                preview_text += f"   信心度: {confidence:.1f}%\n"
-                preview_text += f"   分析理由: {reasoning[:100]}{'...' if len(reasoning) > 100 else ''}\n"
-        
-        preview_text += "\n" + "=" * 50 + "\n"
-        preview_text += "⚠️ 风险提示: 本报告为编程生成的模拟样本，不能作为真实使用，不构成投资建议。\n"
-        preview_text += "投资有风险，决策需谨慎。请根据自身情况做出投资决定。\n"
-        preview_text += "\n💡 完整的精美HTML报告请点击 '🌐 浏览器查看' 按钮。\n"
-        
-        return preview_text
-        
-    def show_error(self, error_msg):
-        """显示错误信息"""
-        QMessageBox.critical(self, "运行错误", f"分析过程中出现错误:\n\n{error_msg}")
-        self.output_text.append(f"\n\n错误: {error_msg}\n")
-        
-    def save_results(self):
-        """保存结果到文件"""
-        if not self.results_text.toPlainText().strip():
-            QMessageBox.warning(self, "警告", "没有结果可保存")
-            return
-            
-        filename, _ = QFileDialog.getSaveFileName(
-            self, "保存结果", "", "文本文件 (*.txt);;所有文件 (*.*)"
-        )
-        
-        if filename:
+            # 生成HTML报告
             try:
-                with open(filename, 'w', encoding='utf-8') as f:
-                    f.write(self.results_text.toPlainText())
-                QMessageBox.information(self, "成功", f"结果已保存到: {filename}")
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
+                html_content = generate_html_report(result)
+                self.current_html_content = html_content
                 
-    def clear_results(self):
-        """清空结果"""
-        self.results_text.clear()
-        self.html_preview.clear()
-        self.current_html_content = None
-        self.current_result_data = None
-        
-    def clear_analysis_cache(self):
-        """清空数据缓存和上次分析的内容"""
-        # 清空结果显示
-        self.clear_results()
-        
-        # 清空运行日志
-        if hasattr(self, 'output_text'):
-            self.output_text.clear()
-        
-        # 重置进度条和状态
-        if hasattr(self, 'progress_bar'):
-            self.progress_bar.setValue(0)
-        if hasattr(self, 'status_label'):
-            self.status_label.setText("准备开始分析...")
-        
-        # 清空数据预取缓存
-        try:
-            from src.utils.data_prefetch import data_prefetcher
-            data_prefetcher.clear_cache()
+                # 显示HTML预览（提取文本内容而不是显示源码）
+                self.html_preview.delete(1.0, tk.END)
+                preview_text = self._extract_html_text(html_content)
+                self.html_preview.insert(tk.END, preview_text)
+                
+            except Exception as e:
+                print(f"生成HTML报告时出错: {e}")
+                self.html_preview.delete(1.0, tk.END)
+                self.html_preview.insert(tk.END, f"生成HTML报告时出错: {e}")
+            
+            # 格式化并显示原始结果
+            try:
+                formatted_result = format_trading_output(result)
+                self.results_text.delete(1.0, tk.END)
+                self.results_text.insert(tk.END, formatted_result)
+                
+            except Exception as e:
+                print(f"格式化结果时出错: {e}")
+                self.results_text.delete(1.0, tk.END)
+                self.results_text.insert(tk.END, f"格式化结果时出错: {e}\n\n原始结果:\n{str(result)}")
+            
+            # 切换到结果标签页
+            self.notebook.select(3)  # 结果标签页是第4个（索引3）
+            
+            print("结果显示完成")
+            
         except Exception as e:
-            print(f"清空数据预取缓存失败: {e}")
+            error_msg = f"处理分析结果时发生错误: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            messagebox.showerror("错误", error_msg)
+            
+    def on_analysis_error(self, error_message):
+        """处理分析错误"""
+        # 在主线程中处理错误
+        self.root.after(0, lambda: self._handle_analysis_error(error_message))
         
-        # 清空API缓存
-        try:
-            from src.tools.api import clear_cache
-            clear_cache()
-        except Exception as e:
-            print(f"清空API缓存失败: {e}")
+    def _handle_analysis_error(self, error_message):
+        """在主线程中处理分析错误"""
+        # 停止进度条
+        self.progress_bar.stop()
         
-        # 清空进度跟踪
-        try:
-            from src.utils.progress import progress
-            progress.clear_all_status()
-        except Exception as e:
-            print(f"清空进度跟踪失败: {e}")
+        # 恢复按钮状态
+        self.run_button.config(state="normal")
+        self.bottom_run_button.config(state="normal")
+        self.stop_button.config(state="disabled")
         
-        # 重置分析计数器
-        self.analysis_start_time = None
-        self.total_analysts = 0
-        self.completed_analysts = 0
+        # 更新状态
+        self.status_label.config(text="分析失败")
         
-        print("✅ 数据缓存和上次分析内容已清空")
+        # 显示错误消息
+        messagebox.showerror("分析错误", error_message)
+        
+        print(f"分析失败: {error_message}")
         
     def open_html_in_browser(self):
         """在浏览器中打开HTML报告"""
         if not self.current_html_content:
-            QMessageBox.warning(self, "警告", "没有可用的HTML报告")
+            messagebox.showwarning("警告", "没有可用的HTML报告")
             return
-        
+            
         try:
             # 创建临时HTML文件
             with tempfile.NamedTemporaryFile(mode='w', suffix='.html', delete=False, encoding='utf-8') as f:
@@ -1253,175 +1052,241 @@ class AIHedgeFundGUI(QMainWindow):
             
             # 在浏览器中打开
             webbrowser.open(f'file://{temp_file}')
-            
-            # 延迟删除临时文件
-            def cleanup():
-                try:
-                    os.unlink(temp_file)
-                except:
-                    pass
-            
-            QTimer.singleShot(5000, cleanup)  # 5秒后删除临时文件
+            print(f"HTML报告已在浏览器中打开: {temp_file}")
             
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法在浏览器中打开HTML报告: {str(e)}")
+            error_msg = f"打开HTML报告时发生错误: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            messagebox.showerror("错误", error_msg)
+            
+    def save_results(self):
+        """保存分析结果"""
+        if not self.current_result_data:
+            messagebox.showwarning("警告", "没有可用的分析结果")
+            return
+            
+        try:
+            # 选择保存文件
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON文件", "*.json"), ("所有文件", "*.*")],
+                title="保存分析结果"
+            )
+            
+            if filename:
+                with open(filename, 'w', encoding='utf-8') as f:
+                    json.dump(self.current_result_data, f, ensure_ascii=False, indent=2)
+                
+                messagebox.showinfo("成功", f"分析结果已保存到: {filename}")
+                print(f"分析结果已保存到: {filename}")
+                
+        except Exception as e:
+            error_msg = f"保存分析结果时发生错误: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            messagebox.showerror("错误", error_msg)
             
     def save_html_report(self):
-        """保存HTML报告到文件"""
+        """保存HTML报告"""
         if not self.current_html_content:
-            QMessageBox.warning(self, "警告", "没有可用的HTML报告")
+            messagebox.showwarning("警告", "没有可用的HTML报告")
             return
-        
-        default_filename = f"AI基金大师分析报告_{datetime.now().strftime('%Y%m%d_%H%M%S')}.html"
-        filename, _ = QFileDialog.getSaveFileName(
-            self, "保存HTML报告", default_filename, "HTML文件 (*.html);;所有文件 (*.*)"
-        )
-        
-        if filename:
-            try:
+            
+        try:
+            # 生成默认文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"AI基金大师分析报告_{timestamp}.html"
+            
+            # 选择保存文件
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".html",
+                filetypes=[("HTML文件", "*.html"), ("所有文件", "*.*")],
+                title="保存HTML报告",
+                initialfile=default_filename
+            )
+            
+            if filename:
                 with open(filename, 'w', encoding='utf-8') as f:
                     f.write(self.current_html_content)
-                QMessageBox.information(self, "成功", f"HTML报告已保存到: {filename}")
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
                 
+                messagebox.showinfo("成功", f"HTML报告已保存到: {filename}")
+                print(f"HTML报告已保存到: {filename}")
+                
+        except Exception as e:
+            error_msg = f"保存HTML报告时发生错误: {str(e)}"
+            print(f"ERROR: {error_msg}")
+            messagebox.showerror("错误", error_msg)
+            
+    def _extract_html_text(self, html_content):
+        """从HTML内容中提取文本用于预览显示"""
+        try:
+            import re
+            from html import unescape
+            
+            # 如果没有HTML内容，返回提示信息
+            if not html_content:
+                return "没有可用的分析报告内容"
+            
+            # 移除CSS样式和脚本
+            text = re.sub(r'<style[^>]*>.*?</style>', '', html_content, flags=re.DOTALL | re.IGNORECASE)
+            text = re.sub(r'<script[^>]*>.*?</script>', '', text, flags=re.DOTALL | re.IGNORECASE)
+            
+            # 移除HTML注释
+            text = re.sub(r'<!--.*?-->', '', text, flags=re.DOTALL)
+            
+            # 将某些块级标签替换为换行
+            text = re.sub(r'</(div|p|h[1-6]|section|article|header|footer|li)>', '\n', text, flags=re.IGNORECASE)
+            text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+            text = re.sub(r'<hr\s*/?>', '\n' + '='*50 + '\n', text, flags=re.IGNORECASE)
+            
+            # 移除所有HTML标签
+            text = re.sub(r'<[^>]+>', '', text)
+            
+            # 解码HTML实体
+            text = unescape(text)
+            
+            # 清理空白字符
+            # 移除行首行尾空白
+            lines = [line.strip() for line in text.split('\n')]
+            # 移除空行（保留一些空行用于格式化）
+            cleaned_lines = []
+            empty_line_count = 0
+            for line in lines:
+                if line.strip():
+                    cleaned_lines.append(line)
+                    empty_line_count = 0
+                else:
+                    empty_line_count += 1
+                    if empty_line_count <= 2:  # 最多保留2个连续空行
+                        cleaned_lines.append('')
+            
+            # 重新组合文本
+            result_text = '\n'.join(cleaned_lines).strip()
+            
+            # 如果结果为空或太短，返回备用信息
+            if not result_text or len(result_text) < 50:
+                return "报告内容生成完成，请点击'浏览器查看'按钮查看完整的格式化报告"
+            
+            return result_text
+            
+        except Exception as e:
+            print(f"提取HTML文本时出错: {e}")
+            return f"HTML内容解析失败: {str(e)}\n\n请使用'浏览器查看'按钮查看完整报告"
+    
+    def clear_results(self):
+        """清空结果"""
+        self.html_preview.delete(1.0, tk.END)
+        self.results_text.delete(1.0, tk.END)
+        self.current_html_content = None
+        self.current_result_data = None
+        print("结果已清空")
+        
+    def load_config(self):
+        """加载配置"""
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                
+                # 恢复配置
+                if 'tickers' in config:
+                    self.tickers_entry.delete(0, tk.END)
+                    self.tickers_entry.insert(0, config['tickers'])
+                
+                if 'initial_cash' in config:
+                    self.initial_cash_entry.delete(0, tk.END)
+                    self.initial_cash_entry.insert(0, config['initial_cash'])
+                
+                if 'margin' in config:
+                    self.margin_entry.delete(0, tk.END)
+                    self.margin_entry.insert(0, config['margin'])
+                
+                if 'show_reasoning' in config:
+                    self.show_reasoning_var.set(config['show_reasoning'])
+                
+                if 'selected_analysts' in config:
+                    # 只恢复仍然存在的分析师配置，过滤掉已删除的分析师
+                    selected_analysts = config['selected_analysts']
+                    if isinstance(selected_analysts, list):
+                        # 列表格式：过滤掉不存在的分析师
+                        valid_analysts = [analyst for analyst in selected_analysts if analyst in self.analyst_checkboxes]
+                        for key, var in self.analyst_checkboxes.items():
+                            var.set(key in valid_analysts)
+                    elif isinstance(selected_analysts, dict):
+                        # 字典格式：只处理仍然存在的分析师
+                        for key, var in self.analyst_checkboxes.items():
+                            if key in selected_analysts:
+                                var.set(selected_analysts[key])
+                            else:
+                                var.set(False)
+                    self.update_analysts_count()
+                
+                print("配置加载成功")
+                
+        except Exception as e:
+            print(f"加载配置时出错: {e}")
+            
     def save_config(self):
-        """保存当前配置到文件"""
+        """保存配置"""
         try:
             config = {
-                "model": self.model_combo.currentText(),
-                "selected_analysts": {key: checkbox.isChecked() for key, checkbox in self.analyst_checkboxes.items()},
-                "tickers": self.tickers_edit.text(),
-                "initial_cash": self.initial_cash_edit.text(),
-                "margin": self.margin_edit.text(),
-                "show_reasoning": self.show_reasoning_checkbox.isChecked(),
-                "window_geometry": f"{self.width()}x{self.height()}+{self.x()}+{self.y()}"
+                'tickers': self.tickers_entry.get(),
+                'initial_cash': self.initial_cash_entry.get(),
+                'margin': self.margin_entry.get(),
+                'show_reasoning': self.show_reasoning_var.get(),
+                'selected_analysts': [key for key, var in self.analyst_checkboxes.items() if var.get()]
             }
             
             with open(self.config_file, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
-                
-        except Exception as e:
-            print(f"保存配置失败: {e}")
             
-    def load_config(self):
-        """从文件加载配置"""
+            print("配置保存成功")
+            
+        except Exception as e:
+            print(f"保存配置时出错: {e}")
+            
+    def on_closing(self):
+        """窗口关闭时的处理"""
         try:
-            if not os.path.exists(self.config_file):
-                return
-                
-            with open(self.config_file, 'r', encoding='utf-8') as f:
-                config = json.load(f)
+            # 保存配置
+            self.save_config()
             
-            # 恢复窗口位置和大小
-            if "window_geometry" in config:
-                try:
-                    geometry = config["window_geometry"]
-                    if '+' in geometry:
-                        parts = geometry.split('+')
-                        if len(parts) >= 3:
-                            x_pos = int(parts[1])
-                            y_pos = int(parts[2])
-                            self.move(x_pos, y_pos)
-                except:
-                    pass
+            # 恢复stdout
+            if self.original_stdout:
+                sys.stdout = self.original_stdout
             
-            # 恢复分析师选择，但过滤掉已删除的分析师
-            if "selected_analysts" in config:
-                # 确保config["selected_analysts"]是字典格式
-                selected_analysts = config["selected_analysts"]
-                if isinstance(selected_analysts, list):
-                    # 兼容旧格式：列表转换为字典
-                    selected_analysts = {analyst: True for analyst in selected_analysts}
-                elif not isinstance(selected_analysts, dict):
-                    # 其他格式，重置为空
-                    selected_analysts = {}
-                
-                # 只恢复仍然存在的分析师配置
-                for key, value in selected_analysts.items():
-                    if key in self.analyst_checkboxes:  # 只处理仍然存在的分析师
-                        self.analyst_checkboxes[key].setChecked(value)
-                self.update_analysts_count()
+            # 如果有正在运行的分析，先停止
+            if self.analysis_worker and self.analysis_worker.is_alive():
+                print("正在停止分析线程...")
+                set_api_interrupt()
+                self.analysis_worker.join(timeout=3.0)
+                clear_api_interrupt()
             
-            # 恢复其他配置
-            if "tickers" in config:
-                self.tickers_edit.setText(config["tickers"])
-            if "initial_cash" in config:
-                self.initial_cash_edit.setText(config["initial_cash"])
-            if "margin" in config:
-                self.margin_edit.setText(config["margin"])
-            if "show_reasoning" in config:
-                self.show_reasoning_checkbox.setChecked(config["show_reasoning"])
-                
+            print("GUI正在关闭...")
+            
         except Exception as e:
-            print(f"加载配置失败: {e}")
-            # 配置加载失败时，设置默认推荐配置
-            self.set_recommended_analysts()
+            print(f"关闭时出错: {e}")
+        finally:
+            self.root.destroy()
             
-    def closeEvent(self, event):
-        """关闭程序时的处理"""
-        # 如果分析正在运行，询问用户
-        if self.analysis_worker and self.analysis_worker.isRunning():
-            reply = QMessageBox.question(
-                self, '确认退出', 
-                '分析正在进行中，确定要退出吗？\n\n退出将丢失当前分析进度。',
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply == QMessageBox.No:
-                event.ignore()
-                return
-            
-            # 停止分析
-            set_api_interrupt()
-            self.analysis_worker.terminate()
-            self.analysis_worker.wait(3000)
+    def run(self):
+        """运行GUI"""
+        # 设置关闭事件处理
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
-        # 恢复原始stdout
-        if self.output_redirector and self.original_stdout:
-            sys.stdout = self.original_stdout
-            print("GUI关闭，stdout已恢复")
-        
-        self.save_config()  # 保存配置
-        event.accept()
+        # 启动主循环
+        self.root.mainloop()
 
 
 def main():
     """主函数"""
-    # 设置Qt应用属性，必须在QApplication创建之前设置
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-    QApplication.setAttribute(Qt.AA_DisableWindowContextHelpButton, True)
-    QApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings, True)
-    
-    app = QApplication(sys.argv)
-    
-    # 设置应用信息
-    app.setApplicationName("AI基金大师投资分析系统")
-    app.setApplicationVersion("2.0.0")
-    
-    # 设置默认字体
     try:
-        default_font = QFont()
-        default_font.setFamily("Microsoft YaHei")
-        default_font.setPointSize(9)
-        default_font.setStyleHint(QFont.SansSerif)
-        app.setFont(default_font)
+        print("启动AI基金大师GUI...")
+        app = AIHedgeFundGUI()
+        app.run()
     except Exception as e:
-        print(f"设置默认字体失败: {e}")
-    
-    try:
-        window = AIHedgeFundGUI()
-        window.show()
-        sys.exit(app.exec_())
-    except Exception as e:
-        print(f"GUI启动失败: {e}")
+        print(f"启动GUI时发生错误: {e}")
         import traceback
-        print(f"详细错误信息: {traceback.format_exc()}")
-        try:
-            QMessageBox.critical(None, "启动错误", f"GUI启动失败:\n{e}")
-        except:
-            print("无法显示错误对话框")
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

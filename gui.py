@@ -85,7 +85,7 @@ def parse_hedge_fund_response(response):
         return None
 
 
-##### Run the Hedge Fund #####
+##### Run the AI Fund Master #####
 def run_hedge_fund(
     tickers: list[str],
     start_date: str,
@@ -268,7 +268,7 @@ class AnalysisWorker(threading.Thread):
             progress.register_handler(progress_handler)
             
             try:
-                print("=== 开始运行hedge fund分析 ===")
+                print("=== 开始运行AI Fund Master分析 ===")
                 print(f"股票代码: {self.config['tickers']}")
                 print(f"开始日期: {self.config['start_date']}")
                 print(f"结束日期: {self.config['end_date']}")
@@ -348,7 +348,7 @@ class AIHedgeFundGUI:
     def init_ui(self):
         """初始化用户界面"""
         self.root = tk.Tk()
-        self.root.title("AI基金大师投资分析系统  v2.0 - 267278466@qq.com")
+        self.root.title("AI基金大师 v2.0 - 267278466@qq.com")
         
         # 设置窗口大小和位置（居中显示）
         window_width = 800
@@ -371,7 +371,7 @@ class AIHedgeFundGUI:
         main_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # 创建标题
-        title_label = ttk.Label(main_frame, text="AI基金大师投资分析系统", 
+        title_label = ttk.Label(main_frame, text="AI基金大师", 
                                font=("Arial", 12, "bold"))
         title_label.pack(pady=(0, 5))
         

@@ -281,6 +281,7 @@ class OllamaChecker:
         """下载指定模型"""
         print(f"\n[5] Downloading model '{self.model_name}'... / 下载模型 '{self.model_name}'...")
         print("This may take a while depending on model size and network speed. / 根据模型大小和网络速度，这可能需要一些时间。")
+        print("Progress / 进度: ", end='', flush=True)
         
         try:
             # 启动下载进程
@@ -297,6 +298,8 @@ class OllamaChecker:
             # 实时显示下载进度
             last_progress = ""
             output_lines = []
+            dot_count = 0
+            last_percent = -1
             
             for line in iter(process.stdout.readline, ''):
                 if line:
@@ -306,14 +309,28 @@ class OllamaChecker:
                     # 解析进度信息
                     progress_info = self.parse_download_progress(line)
                     if progress_info and progress_info != last_progress:
-                        print(f"\r{progress_info}", end='', flush=True)
+                        # 提取百分比用于显示点号和百分比
+                        import re
+                        percent_match = re.search(r'(\d+(?:\.\d+)?)%', progress_info)
+                        if percent_match:
+                            current_percent = int(float(percent_match.group(1)))
+                            # 每10%显示一个点号
+                            while last_percent < current_percent and (current_percent // 10) > (last_percent // 10):
+                                print(".", end='', flush=True)
+                                dot_count += 1
+                                last_percent = (last_percent // 10 + 1) * 10
+                            # 显示当前百分比
+                            print(f" {current_percent}%", end='', flush=True)
                         last_progress = progress_info
                     elif any(keyword in line.lower() for keyword in ['pulling', 'downloading', 'verifying']):
-                        print(f"\r{line}", end='', flush=True)
+                        # 对于非百分比进度，显示一个点号
+                        if dot_count < 50:  # 限制最大点号数量
+                            print(".", end='', flush=True)
+                            dot_count += 1
             
             # 等待进程完成
             return_code = process.wait()
-            print("\r" + " " * 80 + "\r", end='')  # 清除进度行
+            print()  # 换行
             
             if return_code == 0:
                 print(f"✓ Model '{self.model_name}' downloaded successfully / 模型 '{self.model_name}' 下载成功")
@@ -328,7 +345,7 @@ class OllamaChecker:
                 return False
                 
         except Exception as e:
-            print(f"\r" + " " * 80 + "\r", end='')  # 清除进度行
+            print()  # 换行
             print(f"✗ Error downloading model / 下载模型错误: {e}")
             return False
     

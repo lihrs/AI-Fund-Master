@@ -14,9 +14,8 @@
     "technical_analyst": true,
     "aswath_damodaran": true
   },
-  "tickers": "688347",
+  "tickers": "399006",
   "initial_cash": "100000.0",
   "margin": "0.0",
-  "show_reasoning": true,
-  "window_geometry": "1000x700+99+69"
+  "show_reasoning": true
 }

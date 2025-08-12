@@ -143,9 +143,14 @@ def run_hedge_fund(
             print("Warning: Failed to parse portfolio manager response, creating default decisions")
             portfolio_decisions = {ticker: {"action": "hold", "quantity": 0, "confidence": 50.0, "reasoning": "投资组合管理器解析失败，采用默认持有策略"} for ticker in tickers}
 
+        # Fix analyst signal key mapping for HTML report compatibility
+        analyst_signals = final_state["data"]["analyst_signals"].copy()
+        if "technical_analyst_agent" in analyst_signals:
+            analyst_signals["technical_analyst"] = analyst_signals.pop("technical_analyst_agent")
+
         return {
             "decisions": portfolio_decisions,
-            "analyst_signals": final_state["data"]["analyst_signals"],
+            "analyst_signals": analyst_signals,
         }
     finally:
         # 只在非GUI环境中停止rich进度显示
@@ -325,20 +330,11 @@ class AIHedgeFundGUI:
         self.original_stdout = sys.stdout
         self.output_redirector = None
         
-        # 分析师配置 - 更新为实际可用的分析师
+        # 从统一配置文件获取分析师配置
+        from src.utils.analysts import ANALYST_CONFIG
         self.analyst_configs = {
-            "warren_buffett": "沃伦·巴菲特 - 价值投资大师",
-            "charlie_munger": "查理·芒格 - 理性投资者", 
-            "peter_lynch": "彼得·林奇 - 成长股猎手",
-            "phil_fisher": "菲利普·费雪 - 成长投资先驱",
-            "ben_graham": "本杰明·格雷厄姆 - 价值投资之父",
-            "bill_ackman": "比尔·阿克曼 - 激进投资者",
-            "cathie_wood": "凯茜·伍德 - 创新投资女王",
-            "michael_burry": "迈克尔·伯里 - 逆向投资专家",
-            "stanley_druckenmiller": "斯坦利·德鲁肯米勒 - 宏观交易大师",
-            "rakesh_jhunjhunwala": "拉凯什·琼琼瓦拉 - 印度巴菲特",
-            "technical_analyst": "技术面分析师 - 图表分析专家",
-            "aswath_damodaran": "阿斯沃斯·达摩达兰 - 估值教授"
+            key: f"{config['display_name']} - {config['description']}"
+            for key, config in sorted(ANALYST_CONFIG.items(), key=lambda x: x[1]['order'])
         }
         
         self.init_ui()
@@ -348,7 +344,7 @@ class AIHedgeFundGUI:
     def init_ui(self):
         """初始化用户界面"""
         self.root = tk.Tk()
-        self.root.title("AI基金大师 v2.0 - 267278466@qq.com")
+        self.root.title("AI基金大师 v2.1 - 267278466@qq.com")
         
         # 设置窗口大小和位置（居中显示）
         window_width = 800
@@ -410,7 +406,7 @@ class AIHedgeFundGUI:
                                font=("Arial", 12, "bold"))
         title_label.pack(side=tk.LEFT)
         
-        self.analysts_count_label = ttk.Label(title_frame, text="已选择: 0/15")
+        self.analysts_count_label = ttk.Label(title_frame, text="已选择: 0/12")
         self.analysts_count_label.pack(side=tk.RIGHT)
         
         # 快捷操作按钮
@@ -452,8 +448,8 @@ class AIHedgeFundGUI:
         # 创建分析师复选框
         self.analyst_checkboxes = {}
         
-        # 投资大师（前10个）
-        master_analysts = list(self.analyst_configs.items())[:10]
+        # 投资大师（前11个）
+        master_analysts = list(self.analyst_configs.items())[:11]
         for i, (key, name) in enumerate(master_analysts):
             var = tk.BooleanVar(value=True)  # 默认选中
             checkbox = ttk.Checkbutton(masters_group, text=name, variable=var,
@@ -461,8 +457,8 @@ class AIHedgeFundGUI:
             checkbox.grid(row=i//2, column=i%2, sticky="w", padx=5, pady=2)
             self.analyst_checkboxes[key] = var
         
-        # 专业分析师（后5个）
-        tech_analysts = list(self.analyst_configs.items())[10:]
+        # 专业分析师（技术分析师）
+        tech_analysts = list(self.analyst_configs.items())[11:]
         for i, (key, name) in enumerate(tech_analysts):
             var = tk.BooleanVar(value=True)  # 默认选中
             checkbox = ttk.Checkbutton(analysts_group, text=name, variable=var,

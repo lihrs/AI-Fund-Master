@@ -119,7 +119,7 @@ ANALYST_CONFIG = {
         "order": 10,
     },
     "technical_analyst": {
-        "display_name": "技术分析师",
+        "display_name": "技术面分析师",
         "description": "图表模式专家",
         "investing_style": "technical_analysis",
         "agent_func": technical_analyst_agent,

@@ -1,8 +1,12 @@
 import math
 
 from langchain_core.messages import HumanMessage
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel
+from typing_extensions import Literal
 
 from src.graph.state import AgentState, show_agent_reasoning
+from src.utils.llm import call_llm
 
 import json
 import pandas as pd
@@ -16,6 +20,12 @@ from src.utils.data_analysis_rules import (
     format_analysis_reasoning,
     ANALYST_CORE_METRICS
 )
+
+
+class TechnicalAnalystSignal(BaseModel):
+    signal: Literal["bullish", "bearish", "neutral"]
+    confidence: float
+    reasoning: str
 
 
 def safe_float(value, default=0.0):
@@ -60,29 +70,53 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
 
         # 从统一数据访问适配器获取综合数据
         comprehensive_data = unified_data_accessor.data_prefetcher.get_comprehensive_data(ticker, prefetched_data)
-        price_data = comprehensive_data.get('price_data', [])
+        price_data = comprehensive_data.get('prices', [])  # 修正：使用'prices'字段而不是'price_data'
 
         if not price_data:
             progress.update_status(agent_id, ticker, "失败:未找到价格数据")
             continue
 
         # 将价格数据转换为DataFrame(适应原有函数)
-        prices_df = convert_prices_to_df(price_data)
+        try:
+            prices_df = convert_prices_to_df(price_data)
+        except Exception as e:
+            progress.update_status(agent_id, ticker, f"失败:数据转换错误: {e}")
+            continue
 
         progress.update_status(agent_id, ticker, "计算趋势信号")
-        trend_signals = calculate_trend_signals(prices_df)
+        try:
+            trend_signals = calculate_trend_signals(prices_df)
+        except Exception as e:
+            progress.update_status(agent_id, ticker, f"失败:趋势信号计算错误: {e}")
+            continue
 
         progress.update_status(agent_id, ticker, "计算均值回归")
-        mean_reversion_signals = calculate_mean_reversion_signals(prices_df)
+        try:
+            mean_reversion_signals = calculate_mean_reversion_signals(prices_df)
+        except Exception as e:
+            progress.update_status(agent_id, ticker, f"失败:均值回归信号计算错误: {e}")
+            continue
 
         progress.update_status(agent_id, ticker, "计算动量")
-        momentum_signals = calculate_momentum_signals(prices_df)
+        try:
+            momentum_signals = calculate_momentum_signals(prices_df)
+        except Exception as e:
+            progress.update_status(agent_id, ticker, f"失败:动量信号计算错误: {e}")
+            continue
 
         progress.update_status(agent_id, ticker, "分析波动率")
-        volatility_signals = calculate_volatility_signals(prices_df)
+        try:
+            volatility_signals = calculate_volatility_signals(prices_df)
+        except Exception as e:
+            progress.update_status(agent_id, ticker, f"失败:波动率信号计算错误: {e}")
+            continue
 
         progress.update_status(agent_id, ticker, "统计分析")
-        stat_arb_signals = calculate_stat_arb_signals(prices_df)
+        try:
+            stat_arb_signals = calculate_stat_arb_signals(prices_df)
+        except Exception as e:
+            progress.update_status(agent_id, ticker, f"失败:统计套利信号计算错误: {e}")
+            continue
 
         # 使用加权集成方法组合所有信号
         strategy_weights = {
@@ -105,37 +139,49 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
             strategy_weights,
         )
 
-        # 为此股票代码生成详细分析报告
-        technical_analysis[ticker] = {
-            "signal": combined_signal["signal"],
-            "confidence": round(combined_signal["confidence"] * 100),
-            "reasoning": {
-                "trend_following": {
-                    "signal": trend_signals["signal"],
-                    "confidence": round(trend_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(trend_signals["metrics"]),
-                },
-                "mean_reversion": {
-                    "signal": mean_reversion_signals["signal"],
-                    "confidence": round(mean_reversion_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(mean_reversion_signals["metrics"]),
-                },
-                "momentum": {
-                    "signal": momentum_signals["signal"],
-                    "confidence": round(momentum_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(momentum_signals["metrics"]),
-                },
-                "volatility": {
-                    "signal": volatility_signals["signal"],
-                    "confidence": round(volatility_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(volatility_signals["metrics"]),
-                },
-                "statistical_arbitrage": {
-                    "signal": stat_arb_signals["signal"],
-                    "confidence": round(stat_arb_signals["confidence"] * 100),
-                    "metrics": normalize_pandas(stat_arb_signals["metrics"]),
-                },
+        # 生成详细的推理字典
+        reasoning_dict = {
+            "trend": {
+                "signal": trend_signals['signal'],
+                "confidence": round(trend_signals['confidence'] * 100)
             },
+            "mean_reversion": {
+                "signal": mean_reversion_signals['signal'],
+                "confidence": round(mean_reversion_signals['confidence'] * 100)
+            },
+            "momentum": {
+                "signal": momentum_signals['signal'],
+                "confidence": round(momentum_signals['confidence'] * 100)
+            },
+            "volatility": {
+                "signal": volatility_signals['signal'],
+                "confidence": round(volatility_signals['confidence'] * 100)
+            },
+            "stat_arb": {
+                "signal": stat_arb_signals['signal'],
+                "confidence": round(stat_arb_signals['confidence'] * 100)
+            }
+        }
+        
+        # 使用LLM生成详细的技术分析评语
+        progress.update_status(agent_id, ticker, "生成技术分析评语")
+        llm_analysis = generate_technical_analysis_reasoning(
+            ticker, 
+            {
+                "combined_signal": combined_signal,
+                "detailed_signals": reasoning_dict,
+                "strategy_weights": strategy_weights
+            }, 
+            state, 
+            agent_id
+        )
+        
+        # 生成标准信号格式，保持向后兼容性
+        technical_analysis[ticker] = {
+            "signal": llm_analysis.signal,
+            "confidence": llm_analysis.confidence,
+            "reasoning": reasoning_dict,  # 保持原有的字典格式用于测试
+            "detailed_reasoning": llm_analysis.reasoning  # 新增详细的文字评语
         }
         progress.update_status(agent_id, ticker, "完成", analysis=json.dumps(technical_analysis, indent=4))
 
@@ -155,7 +201,7 @@ def technical_analyst_agent(state: AgentState, agent_id: str = "technical_analys
 
     return {
         "messages": state["messages"] + [message],
-        "data": data,
+        "data": state["data"],  # 返回更新后的状态数据
     }
 
 
@@ -164,7 +210,7 @@ def convert_prices_to_df(price_data):
     将价格数据转换为DataFrame,适应原有的技术分析函数
     
     Args:
-        price_data: 来自统一数据适配器的价格数据列表
+        price_data: 来自统一数据适配器的价格数据列表（Price对象列表）
         
     Returns:
         pd.DataFrame: 包含OHLCV数据的DataFrame
@@ -175,14 +221,46 @@ def convert_prices_to_df(price_data):
     # 构建DataFrame
     df_data = []
     for price in price_data:
-        df_data.append({
-            'date': None,  # date字段不支持
-            'open': None,  # open字段不支持
-            'high': None,  # high字段不支持
-            'low': None,  # low字段不支持
-            'current_price': None,  # close字段不支持
-            'volume': None  # volume字段不支持
-        })
+        # 处理Price对象（Pydantic模型）
+        if hasattr(price, 'time'):  # Price对象
+            df_data.append({
+                'date': price.time,  # Price对象使用time字段作为日期
+                'open': safe_float(price.open),
+                'high': safe_float(price.high),
+                'low': safe_float(price.low),
+                'close': safe_float(price.close),
+                'volume': safe_float(price.volume)
+            })
+        elif isinstance(price, dict):  # 字典格式
+            df_data.append({
+                'date': price.get('date', price.get('time')),
+                'open': safe_float(price.get('open', price.get('close', 0))),
+                'high': safe_float(price.get('high', price.get('close', 0))),
+                'low': safe_float(price.get('low', price.get('close', 0))),
+                'close': safe_float(price.get('close', price.get('current_price', 0))),
+                'volume': safe_float(price.get('volume', 0))
+            })
+        else:
+            # 尝试转换为字典
+            try:
+                if hasattr(price, 'model_dump'):  # Pydantic v2
+                    price_dict = price.model_dump()
+                elif hasattr(price, 'dict'):  # Pydantic v1
+                    price_dict = price.dict()
+                else:
+                    price_dict = dict(price)
+                
+                df_data.append({
+                    'date': price_dict.get('date', price_dict.get('time')),
+                    'open': safe_float(price_dict.get('open', price_dict.get('close', 0))),
+                    'high': safe_float(price_dict.get('high', price_dict.get('close', 0))),
+                    'low': safe_float(price_dict.get('low', price_dict.get('close', 0))),
+                    'close': safe_float(price_dict.get('close', price_dict.get('current_price', 0))),
+                    'volume': safe_float(price_dict.get('volume', 0))
+                })
+            except Exception as e:
+                print(f"警告: 无法转换价格数据 {type(price)}: {e}")
+                continue
     
     df = pd.DataFrame(df_data)
     if not df.empty and 'date' in df.columns:
@@ -243,9 +321,9 @@ def calculate_mean_reversion_signals(prices_df):
         return {"signal": "neutral", "confidence": 0.0, "metrics": {}}
     
     # 计算价格相对于移动平均线的z-score
-    ma_50 = prices_df["current_price"].rolling(window=50).mean()
-    std_50 = prices_df["current_price"].rolling(window=50).std()
-    z_score = (prices_df["current_price"] - ma_50) / std_50
+    ma_50 = prices_df["close"].rolling(window=50).mean()
+    std_50 = prices_df["close"].rolling(window=50).std()
+    z_score = (prices_df["close"] - ma_50) / std_50
 
     # 计算布林带
     bb_upper, bb_lower = calculate_bollinger_bands(prices_df)
@@ -255,7 +333,7 @@ def calculate_mean_reversion_signals(prices_df):
     rsi_28 = calculate_rsi(prices_df, 28)
 
     # 均值回归信号
-    price_vs_bb = (prices_df["current_price"].iloc[-1] - bb_lower.iloc[-1]) / (bb_upper.iloc[-1] - bb_lower.iloc[-1])
+    price_vs_bb = (prices_df["close"].iloc[-1] - bb_lower.iloc[-1]) / (bb_upper.iloc[-1] - bb_lower.iloc[-1])
 
     # 组合信号
     if z_score.iloc[-1] < -2 and price_vs_bb < 0.2:
@@ -288,7 +366,7 @@ def calculate_momentum_signals(prices_df):
         return {"signal": "neutral", "confidence": 0.0, "metrics": {}}
     
     # 价格动量
-    returns = prices_df["current_price"].pct_change()
+    returns = prices_df["close"].pct_change()
     mom_1m = returns.rolling(21).sum()
     mom_3m = returns.rolling(63).sum()
     mom_6m = returns.rolling(126).sum()
@@ -336,7 +414,7 @@ def calculate_volatility_signals(prices_df):
         return {"signal": "neutral", "confidence": 0.0, "metrics": {}}
     
     # 计算各种波动率指标
-    returns = prices_df["current_price"].pct_change()
+    returns = prices_df["close"].pct_change()
 
     # 历史波动率
     hist_vol = returns.rolling(21).std() * math.sqrt(252)
@@ -350,7 +428,7 @@ def calculate_volatility_signals(prices_df):
 
     # ATR比率
     atr = calculate_atr(prices_df)
-    atr_ratio = atr / prices_df["current_price"]
+    atr_ratio = atr / prices_df["close"]
 
     # 根据波动率制度生成信号
     current_vol_regime = vol_regime.iloc[-1]
@@ -386,14 +464,14 @@ def calculate_stat_arb_signals(prices_df):
         return {"signal": "neutral", "confidence": 0.0, "metrics": {}}
     
     # 计算价格分布统计
-    returns = prices_df["current_price"].pct_change()
+    returns = prices_df["close"].pct_change()
 
     # 偏度和峰度
     skew = returns.rolling(63).skew()
     kurt = returns.rolling(63).kurt()
 
     # 使用Hurst指数测试均值回归
-    hurst = calculate_hurst_exponent(prices_df["current_price"])
+    hurst = calculate_hurst_exponent(prices_df["close"])
 
     # 相关性分析
     # (在实际实施中会包括与相关证券的相关性)
@@ -470,7 +548,7 @@ def normalize_pandas(obj):
 
 # ── 辅助技术指标计算函数 ──
 def calculate_rsi(prices_df: pd.DataFrame, period: int = 14) -> pd.Series:
-    delta = prices_df["current_price"].diff()
+    delta = prices_df["close"].diff()
     gain = (delta.where(delta > 0, 0)).fillna(0)
     loss = (-delta.where(delta < 0, 0)).fillna(0)
     avg_gain = gain.rolling(window=period).mean()
@@ -481,8 +559,8 @@ def calculate_rsi(prices_df: pd.DataFrame, period: int = 14) -> pd.Series:
 
 
 def calculate_bollinger_bands(prices_df: pd.DataFrame, window: int = 20) -> tuple[pd.Series, pd.Series]:
-    sma = prices_df["current_price"].rolling(window).mean()
-    std_dev = prices_df["current_price"].rolling(window).std()
+    sma = prices_df["close"].rolling(window).mean()
+    std_dev = prices_df["close"].rolling(window).std()
     upper_band = sma + (std_dev * 2)
     lower_band = sma - (std_dev * 2)
     return upper_band, lower_band
@@ -499,7 +577,7 @@ def calculate_ema(df: pd.DataFrame, window: int) -> pd.Series:
     Returns:
         pd.Series: EMA值
     """
-    return df["current_price"].ewm(span=window, adjust=False).mean()
+    return df["close"].ewm(span=window, adjust=False).mean()
 
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
@@ -516,8 +594,8 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     # 计算真实范围
     df = df.copy()
     df["high_low"] = df["high"] - df["low"]
-    df["high_close"] = abs(df["high"] - df["current_price"].shift())
-    df["low_close"] = abs(df["low"] - df["current_price"].shift())
+    df["high_close"] = abs(df["high"] - df["close"].shift())
+    df["low_close"] = abs(df["low"] - df["close"].shift())
     df["tr"] = df[["high_low", "high_close", "low_close"]].max(axis=1)
 
     # 计算方向移动
@@ -548,8 +626,8 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
         pd.Series: ATR值
     """
     high_low = df["high"] - df["low"]
-    high_close = abs(df["high"] - df["current_price"].shift())
-    low_close = abs(df["low"] - df["current_price"].shift())
+    high_close = abs(df["high"] - df["close"].shift())
+    low_close = abs(df["low"] - df["close"].shift())
 
     ranges = pd.concat([high_low, high_close, low_close], axis=1)
     true_range = ranges.max(axis=1)
@@ -582,3 +660,69 @@ def calculate_hurst_exponent(price_series: pd.Series, max_lag: int = 20) -> floa
     except (ValueError, RuntimeWarning):
         # 如果计算失败,返回0.5(随机游走)
         return 0.5
+
+
+def generate_technical_analysis_reasoning(
+    ticker: str,
+    analysis_data: dict,
+    state: AgentState,
+    agent_id: str = "technical_analyst_agent",
+) -> TechnicalAnalystSignal:
+    """使用LLM生成详细的技术分析评语"""
+    template = ChatPromptTemplate.from_messages(
+        [
+            (
+                "system",
+                """你是一位专业的技术分析师，擅长运用多种技术分析方法进行股票分析。
+
+重要规则:
+1. 基于提供的技术指标数据进行专业分析
+2. 结合趋势分析、动量分析、波动率分析等多个维度
+3. 给出清晰的投资建议和详细的分析理由
+4. 分析应该通俗易懂，避免过于技术性的表述
+5. 重点关注技术信号的强度和可靠性
+6. 提供具体的技术指标支撑""",
+            ),
+            (
+                "human",
+                """请分析股票{ticker}的技术面情况。
+
+技术分析数据:
+{analysis_data}
+
+请根据技术分析原理给出投资建议。
+
+必须返回以下JSON格式:
+{{"signal": "bullish", "confidence": 85.5, "reasoning": "详细的技术分析原因"}}
+
+其中:
+- signal必须是 bullish(看涨)、bearish(看跌)或 neutral(中性)
+- confidence是0到100之间的数字
+- reasoning是你的详细技术分析理由
+        
+重要提醒:
+- 基于多个技术指标的综合分析给出结论
+- 说明各个技术信号的含义和重要性
+- 提供具体的技术指标数值支撑
+- 分析应该清晰易懂，重点突出技术信号强度"""
+            ),
+        ]
+    )
+
+    prompt = template.invoke({"analysis_data": json.dumps(analysis_data, indent=2), "ticker": ticker})
+
+    # 解析失败时的默认备用信号
+    def create_default_technical_signal():
+        return TechnicalAnalystSignal(
+            signal="neutral", 
+            confidence=50.0, 
+            reasoning="技术分析处理中遇到问题，建议保持观望态度"
+        )
+
+    return call_llm(
+        prompt=prompt,
+        pydantic_model=TechnicalAnalystSignal,
+        agent_name=agent_id,
+        state=state,
+        default_factory=create_default_technical_signal,
+    )

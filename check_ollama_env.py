@@ -280,7 +280,7 @@ class OllamaChecker:
     def download_model(self) -> bool:
         """下载指定模型"""
         print(f"\n[5] Downloading model '{self.model_name}'... / 下载模型 '{self.model_name}'...")
-        print("This may take a while depending on model size and network speed. / 根据模型大小和网络速度，这可能需要一些时间。")
+        print("This may take a while depending on model size and network speed. / 时间较长，如果太慢，请同时按下Ctrl + C,并回答y终止，然后重新再启动软件")
         print("Progress / 进度: ", end='', flush=True)
         
         try:

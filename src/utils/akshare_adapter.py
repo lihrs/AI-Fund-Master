@@ -20,23 +20,17 @@ class AKShareAdapter:
                     if not result.empty:
                         return result
                     else:
-                        self.logger.warning(f"数据为空DataFrame")
                         return None
                 else:
                     # 如果没有empty属性，可能是其他类型的数据，直接返回
                     return result
             else:
-                self.logger.warning(f"数据为None: {func.__name__}")
                 return None
-        except TypeError as e:
-            if "'NoneType' object is not subscriptable" in str(e):
-                self.logger.warning(f"AKShare API内部错误（NoneType subscriptable），跳过此API: {func.__name__} - {e}")
-                return None
-            else:
-                self.logger.warning(f"获取数据失败: {func.__name__} - {e}")
-                return None
+        except (TypeError, AttributeError, KeyError, IndexError, ValueError) as e:
+            # 静默处理所有常见错误，不输出警告
+            return None
         except Exception as e:
-            self.logger.warning(f"获取数据失败: {func.__name__} - {e}")
+            # 静默处理其他所有错误
             return None
     
     def get_financial_statements(self, stock_code: str) -> Dict[str, Any]:
@@ -44,29 +38,34 @@ class AKShareAdapter:
         try:
             statements = {}
             
-            # 获取资产负债表
-            try:
-                balance_sheet = self._safe_get_data(ak.stock_balance_sheet_by_report_em, symbol=stock_code)
-                if balance_sheet is not None and not balance_sheet.empty:
-                    statements['balance_sheet'] = balance_sheet.to_dict('records')
-            except Exception as e:
-                self.logger.warning(f"获取资产负债表失败: {e}")
+            # 注释掉经常出错的财务报表API调用
+            # 这些API经常返回NoneType错误，暂时禁用
             
-            # 获取利润表
-            try:
-                income_statement = self._safe_get_data(ak.stock_profit_sheet_by_report_em, symbol=stock_code)
-                if income_statement is not None and not income_statement.empty:
-                    statements['income_statement'] = income_statement.to_dict('records')
-            except Exception as e:
-                self.logger.warning(f"获取利润表失败: {e}")
+            # # 获取资产负债表
+            # try:
+            #     balance_sheet = self._safe_get_data(ak.stock_balance_sheet_by_report_em, symbol=stock_code)
+            #     if balance_sheet is not None and not balance_sheet.empty:
+            #         statements['balance_sheet'] = balance_sheet.to_dict('records')
+            # except Exception as e:
+            #     self.logger.warning(f"获取资产负债表失败: {e}")
+            # 
+            # # 获取利润表
+            # try:
+            #     income_statement = self._safe_get_data(ak.stock_profit_sheet_by_report_em, symbol=stock_code)
+            #     if income_statement is not None and not income_statement.empty:
+            #         statements['income_statement'] = income_statement.to_dict('records')
+            # except Exception as e:
+            #     self.logger.warning(f"获取利润表失败: {e}")
+            # 
+            # # 获取现金流量表
+            # try:
+            #     cash_flow = self._safe_get_data(ak.stock_cash_flow_sheet_by_report_em, symbol=stock_code)
+            #     if cash_flow is not None and not cash_flow.empty:
+            #         statements['cash_flow'] = cash_flow.to_dict('records')
+            # except Exception as e:
+            #     self.logger.warning(f"获取现金流量表失败: {e}")
             
-            # 获取现金流量表
-            try:
-                cash_flow = self._safe_get_data(ak.stock_cash_flow_sheet_by_report_em, symbol=stock_code)
-                if cash_flow is not None and not cash_flow.empty:
-                    statements['cash_flow'] = cash_flow.to_dict('records')
-            except Exception as e:
-                self.logger.warning(f"获取现金流量表失败: {e}")
+            self.logger.info(f"财务报表API已禁用以避免NoneType错误")
             
             return statements
         except Exception as e:
@@ -225,16 +224,18 @@ class AKShareAdapter:
             except Exception as e:
                 self.logger.warning(f"获取{stock_code}东方财富基本信息失败: {e}")
             
-            # 数据源2: 新浪财经实时行情
-            try:
-                sina_realtime = self._safe_get_data(ak.stock_zh_a_spot_em)
-                if sina_realtime is not None and not sina_realtime.empty:
-                    # 查找对应股票代码的数据
-                    stock_data = sina_realtime[sina_realtime['代码'] == stock_code]
-                    if not stock_data.empty:
-                        basic_info['sina_realtime'] = stock_data.iloc[0].to_dict()
-            except Exception as e:
-                self.logger.warning(f"获取{stock_code}新浪实时行情失败: {e}")
+            # 数据源2: 新浪财经实时行情 (已禁用，经常连接失败)
+            # try:
+            #     sina_realtime = self._safe_get_data(ak.stock_zh_a_spot_em)
+            #     if sina_realtime is not None and not sina_realtime.empty:
+            #         # 查找对应股票代码的数据
+            #         stock_data = sina_realtime[sina_realtime['代码'] == stock_code]
+            #         if not stock_data.empty:
+            #             basic_info['sina_realtime'] = stock_data.iloc[0].to_dict()
+            # except Exception as e:
+            #     self.logger.warning(f"获取{stock_code}新浪实时行情失败: {e}")
+            
+            self.logger.info(f"新浪实时行情API已禁用，因为经常连接失败")
             
             # 数据源3: 股票历史行情 (用于计算技术指标)
             try:
@@ -522,8 +523,8 @@ class AKShareAdapter:
         
         try:
             # 获取历史行情数据
-            hist_data = self.get_historical_data(stock_code, period='1y')
-            if hist_data and not hist_data.empty:
+            hist_data = self._safe_get_data(ak.stock_zh_a_hist, symbol=stock_code, period='daily', adjust='qfq')
+            if hist_data is not None and not hist_data.empty:
                 # 计算技术指标
                 latest_price = hist_data['close'].iloc[-1] if 'close' in hist_data.columns else None
                 if latest_price:
@@ -697,20 +698,23 @@ class AKShareAdapter:
         """获取分红数据"""
         dividend_data = {}
         
-        try:
-            df = self._safe_get_data(ak.stock_zh_a_dividend, symbol=stock_code)
-            if df is not None and not df.empty:
-                # 获取最新分红数据
-                latest_dividend = df.iloc[-1] if len(df) > 0 else None
-                if latest_dividend is not None:
-                    dividend_data.update({
-                        'dividend_per_share': self._safe_float(latest_dividend.get('每股股利')),
-                        'dividend_yield': self._safe_float(latest_dividend.get('股息率')),
-                        'payout_ratio': self._safe_float(latest_dividend.get('分红比例')),
-                        'ex_dividend_date': latest_dividend.get('除权除息日')
-                    })
-        except Exception as e:
-            self.logger.warning(f"获取分红数据失败: {e}")
+        # 注释掉不存在的分红数据API
+        # try:
+        #     df = self._safe_get_data(ak.stock_zh_a_dividend, symbol=stock_code)
+        #     if df is not None and not df.empty:
+        #         # 获取最新分红数据
+        #         latest_dividend = df.iloc[-1] if len(df) > 0 else None
+        #         if latest_dividend is not None:
+        #             dividend_data.update({
+        #                 'dividend_per_share': self._safe_float(latest_dividend.get('每股股利')),
+        #                 'dividend_yield': self._safe_float(latest_dividend.get('股息率')),
+        #                 'payout_ratio': self._safe_float(latest_dividend.get('分红比例')),
+        #                 'ex_dividend_date': latest_dividend.get('除权除息日')
+        #             })
+        # except Exception as e:
+        #     self.logger.warning(f"获取分红数据失败: {e}")
+        
+        self.logger.info(f"分红数据API已禁用，因为stock_zh_a_dividend不存在")
         
         return dividend_data
     
@@ -1953,31 +1957,34 @@ class AKShareAdapter:
         """获取增强的分红数据"""
         dividend_data = {}
         
-        try:
-            # 获取历史分红数据
-            df = self._safe_get_data(ak.stock_zh_a_dividend, symbol=stock_code)
-            if df is not None and not df.empty:
-                # 获取最新分红数据
-                latest_dividend = df.iloc[-1] if len(df) > 0 else None
-                if latest_dividend is not None:
-                    dividend_data.update({
-                        'dividend_per_share': self._safe_float(latest_dividend.get('每股股利')),
-                        'dividend_yield': self._safe_float(latest_dividend.get('股息率')),
-                        'payout_ratio': self._safe_float(latest_dividend.get('分红比例')),
-                        'ex_dividend_date': latest_dividend.get('除权除息日'),
-                        'dividend_announcement_date': latest_dividend.get('公告日期')
-                    })
-                
-                # 计算历史分红统计
-                if len(df) > 1:
-                    dividend_data.update({
-                        'dividend_history_years': len(df),
-                        'avg_dividend_per_share': self._safe_float(df['每股股利'].mean()) if '每股股利' in df.columns else None,
-                        'dividend_growth_rate': self._calculate_dividend_growth_rate(df)
-                    })
+        # 注释掉不存在的分红数据API
+        # try:
+        #     # 获取历史分红数据
+        #     df = self._safe_get_data(ak.stock_zh_a_dividend, symbol=stock_code)
+        #     if df is not None and not df.empty:
+        #         # 获取最新分红数据
+        #         latest_dividend = df.iloc[-1] if len(df) > 0 else None
+        #         if latest_dividend is not None:
+        #             dividend_data.update({
+        #                 'dividend_per_share': self._safe_float(latest_dividend.get('每股股利')),
+        #                 'dividend_yield': self._safe_float(latest_dividend.get('股息率')),
+        #                 'payout_ratio': self._safe_float(latest_dividend.get('分红比例')),
+        #                 'ex_dividend_date': latest_dividend.get('除权除息日'),
+        #                 'dividend_announcement_date': latest_dividend.get('公告日期')
+        #             })
+        #         
+        #         # 计算历史分红统计
+        #         if len(df) > 1:
+        #             dividend_data.update({
+        #                 'dividend_history_years': len(df),
+        #                 'avg_dividend_per_share': self._safe_float(df['每股股利'].mean()) if '每股股利' in df.columns else None,
+        #                 'dividend_growth_rate': self._calculate_dividend_growth_rate(df)
+        #             })
+        # 
+        # except Exception as e:
+        #     self.logger.warning(f"获取分红数据失败: {e}")
         
-        except Exception as e:
-            self.logger.warning(f"获取分红数据失败: {e}")
+        self.logger.info(f"增强分红数据API已禁用，因为stock_zh_a_dividend不存在")
         
         return {k: v for k, v in dividend_data.items() if v is not None}
     
@@ -1986,37 +1993,73 @@ class AKShareAdapter:
         valuation_data = {}
         
         try:
-            # 优先数据源1: AKShare官方A股个股市盈率、市净率和股息率指标 (最准确)
+            # 优先数据源1: 使用stock_industry_pe_ratio_cninfo获取PE数据 (推荐)
             try:
-                df = self._safe_get_data(ak.stock_a_indicator_lg, symbol=stock_code)
+                df = self._safe_get_data(ak.stock_industry_pe_ratio_cninfo)
                 if df is not None and not df.empty:
-                    # 获取最新数据
-                    latest_data = df.iloc[-1] if len(df) > 0 else None
-                    if latest_data is not None:
-                        pe_ratio = self._safe_float(latest_data.get('市盈率'))
-                        pb_ratio = self._safe_float(latest_data.get('市净率'))
-                        dividend_yield = self._safe_float(latest_data.get('股息率'))
-                        
-                        # 验证PE/PB数据的合理性
-                        if pe_ratio is not None and 0 < pe_ratio <= 1000:
-                            valuation_data['pe_ratio'] = pe_ratio
-                            valuation_data['pe_ratio_source'] = 'akshare_official'
-                            self.logger.info(f"获取到官方PE数据: {pe_ratio}")
-                        
-                        if pb_ratio is not None and 0 < pb_ratio <= 100:
-                            valuation_data['pb_ratio'] = pb_ratio
-                            valuation_data['pb_ratio_source'] = 'akshare_official'
-                            self.logger.info(f"获取到官方PB数据: {pb_ratio}")
-                        
-                        if dividend_yield is not None:
-                            valuation_data['dividend_yield'] = dividend_yield
-                            
-                        # 添加数据日期
-                        if '日期' in latest_data:
-                            valuation_data['valuation_date'] = latest_data.get('日期')
+                    # 安全地查找对应股票代码的数据，处理Length mismatch错误
+                    try:
+                        if '股票代码' in df.columns:
+                            stock_data = df[df['股票代码'] == stock_code]
+                            if not stock_data.empty:
+                                latest_data = stock_data.iloc[-1]
+                                pe_ratio = self._safe_float(latest_data.get('市盈率'))
+                                pb_ratio = self._safe_float(latest_data.get('市净率'))
+                                
+                                # 验证PE/PB数据的合理性
+                                if pe_ratio is not None and 0 < pe_ratio <= 1000:
+                                    valuation_data['pe_ratio'] = pe_ratio
+                                    valuation_data['pe_ratio_source'] = 'cninfo_industry'
+                                    self.logger.info(f"获取到CNINFO PE数据: {pe_ratio}")
+                                
+                                if pb_ratio is not None and 0 < pb_ratio <= 100:
+                                    valuation_data['pb_ratio'] = pb_ratio
+                                    valuation_data['pb_ratio_source'] = 'cninfo_industry'
+                                    self.logger.info(f"获取到CNINFO PB数据: {pb_ratio}")
+                                    
+                                # 添加行业信息
+                                if '行业名称' in latest_data:
+                                    valuation_data['industry_name'] = latest_data.get('行业名称')
+                        else:
+                            self.logger.warning("CNINFO数据中缺少'股票代码'列")
+                    except (KeyError, IndexError, ValueError) as e:
+                        self.logger.warning(f"处理CNINFO数据时出现Length mismatch或索引错误: {e}")
                             
             except Exception as e:
-                self.logger.warning(f"获取AKShare官方PE/PB数据失败: {e}")
+                self.logger.warning(f"获取CNINFO行业PE数据失败: {e}")
+            
+            # 备份数据源1: AKShare官方A股个股市盈率、市净率和股息率指标
+            if 'pe_ratio' not in valuation_data:  # 只有在主要数据源失败时才使用备份
+                try:
+                    df = self._safe_get_data(ak.stock_a_indicator_lg, symbol=stock_code)
+                    if df is not None and not df.empty:
+                        # 获取最新数据
+                        latest_data = df.iloc[-1] if len(df) > 0 else None
+                        if latest_data is not None:
+                            pe_ratio = self._safe_float(latest_data.get('市盈率'))
+                            pb_ratio = self._safe_float(latest_data.get('市净率'))
+                            dividend_yield = self._safe_float(latest_data.get('股息率'))
+                            
+                            # 验证PE/PB数据的合理性
+                            if pe_ratio is not None and 0 < pe_ratio <= 1000:
+                                valuation_data['pe_ratio'] = pe_ratio
+                                valuation_data['pe_ratio_source'] = 'akshare_official_backup'
+                                self.logger.info(f"获取到官方PE备份数据: {pe_ratio}")
+                            
+                            if pb_ratio is not None and 0 < pb_ratio <= 100:
+                                valuation_data['pb_ratio'] = pb_ratio
+                                valuation_data['pb_ratio_source'] = 'akshare_official_backup'
+                                self.logger.info(f"获取到官方PB备份数据: {pb_ratio}")
+                            
+                            if dividend_yield is not None:
+                                valuation_data['dividend_yield'] = dividend_yield
+                                
+                            # 添加数据日期
+                            if '日期' in latest_data:
+                                valuation_data['valuation_date'] = latest_data.get('日期')
+                                
+                except Exception as e:
+                    self.logger.warning(f"获取AKShare官方PE/PB数据失败: {e}")
             
             # 补充数据源2: 全部A股等权重市盈率、中位数市盈率
             try:

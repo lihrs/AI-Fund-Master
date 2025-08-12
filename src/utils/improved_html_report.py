@@ -372,8 +372,14 @@ class ImprovedHTMLReportGenerator:
                     confidence = signal.get("confidence", 0)
                     reasoning = signal.get("reasoning", "")
                     
-                    # 筛选条件：信心度>30%且有详细分析
-                    if confidence > 30 and len(reasoning) > 50 and "无详细分析" not in reasoning:
+                    # 降低过滤门槛，确保技术面分析师不被过滤
+                    # 技术面分析师特殊处理：只要有信号就显示
+                    if analyst_name == "technical_analyst" or analyst_name == "技术面分析师":
+                        if analyst_name not in high_quality:
+                            high_quality[analyst_name] = {}
+                        high_quality[analyst_name][ticker] = signal
+                    # 其他分析师：信心度>20%且有基本分析内容
+                    elif confidence > 20 and len(str(reasoning)) > 20 and "无详细分析" not in str(reasoning):
                         if analyst_name not in high_quality:
                             high_quality[analyst_name] = {}
                         high_quality[analyst_name][ticker] = signal
@@ -396,7 +402,12 @@ class ImprovedHTMLReportGenerator:
         for ticker, signal in signals.items():
             signal_type = signal.get("signal", "neutral")
             confidence = signal.get("confidence", 0)
-            reasoning = signal.get("reasoning", "")
+            
+            # 对于技术分析师，优先使用detailed_reasoning（支持本地化后的名称）
+            if (analyst_name == "technical_analyst" or analyst_name == "技术面分析师") and "detailed_reasoning" in signal:
+                reasoning = signal.get("detailed_reasoning", "")
+            else:
+                reasoning = signal.get("reasoning", "")
             
             # 截取推理内容
             short_reasoning = reasoning[:150] + "..." if len(reasoning) > 150 else reasoning
@@ -765,6 +776,9 @@ class DataValidator:
                             "confidence": max(0, min(100, signal.get("confidence", 0))),
                             "reasoning": signal.get("reasoning", "暂无详细分析")
                         }
+                        # 保留detailed_reasoning字段（如果存在）
+                        if "detailed_reasoning" in signal:
+                            cleaned_signal["detailed_reasoning"] = signal["detailed_reasoning"]
                         cleaned_signals[ticker] = cleaned_signal
                 cleaned[analyst] = cleaned_signals
         return cleaned
@@ -795,6 +809,7 @@ class ContentLocalizer:
                 for ticker, signal in signals.items():
                     if isinstance(signal, dict):
                         localized_signal = signal.copy()
+
                         # 本地化推理内容
                         reasoning = signal.get("reasoning", "")
                         if reasoning and self._is_english_content(reasoning):
@@ -819,23 +834,37 @@ class ContentLocalizer:
             "charlie_munger_agent": "查理·芒格",
             "fundamentals_agent": "基本面分析师",
             "sentiment_agent": "情绪分析师",
-            "technicals_agent": "技术面分析师",
+            "technical_analyst": "技术面分析师",
             "valuation_agent": "估值分析师",
             "risk_management_agent": "风险管理"
         }
         return name_map.get(analyst_name, analyst_name)
     
-    def _is_english_content(self, text: str) -> bool:
+    def _is_english_content(self, text) -> bool:
         """判断是否为英文内容"""
         if not text:
             return False
+        
+        # 确保text是字符串类型
+        if not isinstance(text, str):
+            text = str(text)
+        
         # 简单判断：如果英文字符占比超过50%，认为是英文内容
-        english_chars = sum(1 for c in text if c.isalpha() and ord(c) < 128)
-        total_chars = len([c for c in text if c.isalpha()])
-        return total_chars > 0 and english_chars / total_chars > 0.5
+        try:
+            english_chars = sum(1 for c in text if c.isalpha() and len(c) == 1 and ord(c) < 128)
+            total_chars = len([c for c in text if c.isalpha()])
+            return total_chars > 0 and english_chars / total_chars > 0.5
+        except (TypeError, ValueError):
+            return False
     
-    def _translate_to_chinese(self, text: str) -> str:
+    def _translate_to_chinese(self, text) -> str:
         """翻译为中文（简化版本）"""
+        # 确保text是字符串类型
+        if not isinstance(text, str):
+            if text is None:
+                return ""
+            text = str(text)
+        
         # 这里可以集成真正的翻译API
         # 目前只做简单的关键词替换
         translations = {

@@ -89,8 +89,10 @@ class AKShareHelper:
     
     # 包装常用的AKShare函数
     def get_stock_list(self):
-        """获取股票列表"""
-        return self.safe_call(ak.stock_zh_a_spot_em)
+        """获取股票列表 (已禁用，经常连接失败)"""
+        # return self.safe_call(ak.stock_zh_a_spot_em)
+        logger.info("股票列表API已禁用，因为经常连接失败")
+        return None
     
     def get_stock_info(self, symbol: str):
         """获取股票基本信息"""

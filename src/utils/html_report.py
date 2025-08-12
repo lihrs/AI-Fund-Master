@@ -116,7 +116,7 @@ class ContentLocalizer:
             "stanley_druckenmiller_agent": "斯坦利·德鲁肯米勒",
             "rakesh_jhunjhunwala_agent": "拉凯什·琼琼瓦拉",
             "fundamentals_analyst_agent": "基本面分析师",
-            "technical_analyst_agent": "技术面分析师",
+            "technical_analyst": "技术面分析师",
             "sentiment_analyst_agent": "情绪分析师",
             "valuation_analyst_agent": "估值分析师"
         }
@@ -1038,12 +1038,18 @@ class ImprovedHTMLReportGenerator:
             for ticker, signal in signals.items():
                 signal_type = signal.get("signal", "neutral")
                 confidence = signal.get("confidence", 0)
-                reasoning = signal.get("reasoning", "")
+                
+                # 对于技术分析师，优先使用detailed_reasoning字段
+                if analyst_id == "technical_analyst" and "detailed_reasoning" in signal:
+                    reasoning = signal.get("detailed_reasoning", "")
+                    # 对于detailed_reasoning，不进行格式化，直接使用
+                    formatted_reasoning = reasoning
+                else:
+                    reasoning = signal.get("reasoning", "")
+                    # 格式化推理内容
+                    formatted_reasoning = self._format_reasoning(reasoning, analyst_id)
                 
                 signal_text = signal_names.get(signal_type, signal_type)
-                
-                # 格式化推理内容
-                formatted_reasoning = self._format_reasoning(reasoning, analyst_id)
                 
                 # 确定信心度样式类
                 confidence_class = "low-confidence" if confidence < 50 else ""
@@ -1128,7 +1134,7 @@ class ImprovedHTMLReportGenerator:
             return self._format_sentiment_reasoning(reasoning)
         elif analyst_id == "risk_management_agent":
             return self._format_risk_reasoning(reasoning)
-        elif analyst_id == "technical_analyst_agent":
+        elif analyst_id == "technical_analyst":
             return self._format_technical_reasoning(reasoning)
         elif analyst_id == "bill_ackman_agent":
             return self._format_bill_ackman_reasoning(reasoning)
@@ -2613,7 +2619,7 @@ def generate_analyst_analysis(analyst_signals):
             "stanley_druckenmiller_agent": "斯坦利·德鲁肯米勒",
             "rakesh_jhunjhunwala_agent": "拉凯什·琼琼瓦拉",
             "fundamentals_analyst_agent": "基本面分析师",
-            "technical_analyst_agent": "技术面分析师",
+            "technical_analyst": "技术面分析师",
             "sentiment_analyst_agent": "情绪分析师",
             "valuation_analyst_agent": "估值分析师"
         }

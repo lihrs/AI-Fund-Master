@@ -1,6 +1,6 @@
 {
   "provider": "Ollama",
-  "model": "qwen3:4b",
+  "model": "qwen3:0.6b",
   "selected_analysts": {
     "warren_buffett": true,
     "charlie_munger": true,

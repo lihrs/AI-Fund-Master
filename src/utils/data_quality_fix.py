@@ -113,8 +113,196 @@ class DataQualityFixer:
         total_count = 0
         
         for field, value in data.items():
-            if field in self.validation_rules and value is not None:
+            if field in self.validation_rules:
                 total_count += 1
+                rules = self.validation_rules[field]
+                
+                try:
+                    numeric_value = float(value)
+                    if rules['min'] <= numeric_value <= rules['max']:
+                        valid_count += 1
+                    else:
+                        invalid_fields.append(f"{field}: {value} (范围: {rules['min']}-{rules['max']})")
+                except (ValueError, TypeError):
+                    invalid_fields.append(f"{field}: {value} (非数值)")
+        
+        accuracy_score = valid_count / total_count if total_count > 0 else 1.0
+        return accuracy_score, invalid_fields
+    
+    def validate_data_consistency(self, data: Dict[str, Any]) -> Tuple[float, List[str]]:
+        """验证数据一致性"""
+        warnings = []
+        consistency_score = 1.0
+        
+        # 检查财务比率一致性
+        try:
+            revenue = data.get('revenue', 0)
+            net_income = data.get('net_income', 0)
+            total_assets = data.get('total_assets', 0)
+            shareholders_equity = data.get('shareholders_equity', 0)
+            
+            # 检查净利率
+            if revenue > 0 and net_income > 0:
+                calculated_margin = net_income / revenue
+                reported_margin = data.get('net_margin', calculated_margin)
+                if abs(calculated_margin - reported_margin) > 0.05:  # 5%容差
+                    warnings.append(f"净利率不一致: 计算值{calculated_margin:.3f} vs 报告值{reported_margin:.3f}")
+                    consistency_score -= 0.1
+            
+            # 检查ROE
+            if shareholders_equity > 0 and net_income > 0:
+                calculated_roe = net_income / shareholders_equity
+                reported_roe = data.get('roe', calculated_roe)
+                if abs(calculated_roe - reported_roe) > 0.05:
+                    warnings.append(f"ROE不一致: 计算值{calculated_roe:.3f} vs 报告值{reported_roe:.3f}")
+                    consistency_score -= 0.1
+            
+            # 检查ROA
+            if total_assets > 0 and net_income > 0:
+                calculated_roa = net_income / total_assets
+                reported_roa = data.get('roa', calculated_roa)
+                if abs(calculated_roa - reported_roa) > 0.05:
+                    warnings.append(f"ROA不一致: 计算值{calculated_roa:.3f} vs 报告值{reported_roa:.3f}")
+                    consistency_score -= 0.1
+                    
+        except Exception as e:
+            warnings.append(f"一致性检查异常: {e}")
+            consistency_score -= 0.2
+        
+        return max(consistency_score, 0.0), warnings
+    
+    def generate_quality_report(self, ticker: str, data: Dict[str, Any]) -> DataQualityReport:
+        """生成数据质量报告"""
+        # 验证完整性
+        completeness_score, missing_fields = self.validate_data_completeness(data, 'financial_metrics')
+        
+        # 验证准确性
+        accuracy_score, invalid_fields = self.validate_data_accuracy(data)
+        
+        # 验证一致性
+        consistency_score, consistency_warnings = self.validate_data_consistency(data)
+        
+        # 计算总体评分
+        overall_score = (completeness_score * 0.4 + accuracy_score * 0.3 + consistency_score * 0.3)
+        
+        # 确定质量等级
+        if overall_score >= 0.9:
+            quality_level = DataQualityLevel.EXCELLENT
+        elif overall_score >= 0.7:
+            quality_level = DataQualityLevel.GOOD
+        elif overall_score >= 0.5:
+            quality_level = DataQualityLevel.FAIR
+        elif overall_score >= 0.3:
+            quality_level = DataQualityLevel.POOR
+        else:
+            quality_level = DataQualityLevel.CRITICAL
+        
+        # 生成建议
+        recommendations = []
+        if completeness_score < 0.8:
+            recommendations.append("建议补充缺失的关键财务指标")
+        if accuracy_score < 0.8:
+            recommendations.append("建议检查和修正异常数值")
+        if consistency_score < 0.8:
+            recommendations.append("建议验证财务比率的计算一致性")
+        
+        warnings = consistency_warnings.copy()
+        if missing_fields:
+            warnings.extend([f"缺失字段: {field}" for field in missing_fields[:3]])
+        if invalid_fields:
+            warnings.extend(invalid_fields[:3])
+        
+        return DataQualityReport(
+            ticker=ticker,
+            overall_score=overall_score,
+            quality_level=quality_level,
+            completeness_score=completeness_score,
+            accuracy_score=accuracy_score,
+            consistency_score=consistency_score,
+            missing_fields=missing_fields,
+            invalid_fields=invalid_fields,
+            warnings=warnings,
+            recommendations=recommendations
+        )
+    
+    def repair_data_issues(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """修复数据质量问题"""
+        repaired_data = data.copy()
+        
+        # 1. 修复异常值
+        for field, value in repaired_data.items():
+            if field in self.validation_rules and isinstance(value, (int, float)):
+                rules = self.validation_rules[field]
+                if value < rules['min']:
+                    repaired_data[field] = rules['min']
+                    logger.warning(f"修复 {field}: {value} -> {rules['min']} (低于最小值)")
+                elif value > rules['max']:
+                    repaired_data[field] = rules['max']
+                    logger.warning(f"修复 {field}: {value} -> {rules['max']} (超过最大值)")
+        
+        # 2. 补充缺失的关键指标
+        self._fill_missing_metrics(repaired_data)
+        
+        # 3. 修复不一致的比率
+        self._fix_inconsistent_ratios(repaired_data)
+        
+        return repaired_data
+    
+    def _fill_missing_metrics(self, data: Dict[str, Any]) -> None:
+        """填充缺失的关键指标"""
+        # 计算缺失的财务比率
+        revenue = data.get('revenue', 0)
+        net_income = data.get('net_income', 0)
+        total_assets = data.get('total_assets', 0)
+        shareholders_equity = data.get('shareholders_equity', 0)
+        
+        # 计算净利率
+        if revenue > 0 and net_income > 0 and 'net_margin' not in data:
+            data['net_margin'] = net_income / revenue
+        
+        # 计算ROE
+        if shareholders_equity > 0 and net_income > 0 and 'roe' not in data:
+            data['roe'] = net_income / shareholders_equity
+        
+        # 计算ROA
+        if total_assets > 0 and net_income > 0 and 'roa' not in data:
+            data['roa'] = net_income / total_assets
+        
+        # 计算债务权益比
+        total_debt = data.get('total_debt', 0)
+        if shareholders_equity > 0 and total_debt > 0 and 'debt_to_equity_ratio' not in data:
+            data['debt_to_equity_ratio'] = total_debt / shareholders_equity
+    
+    def _fix_inconsistent_ratios(self, data: Dict[str, Any]) -> None:
+        """修复不一致的比率"""
+        revenue = data.get('revenue', 0)
+        net_income = data.get('net_income', 0)
+        total_assets = data.get('total_assets', 0)
+        shareholders_equity = data.get('shareholders_equity', 0)
+        
+        # 修复净利率
+        if revenue > 0 and net_income > 0:
+            calculated_margin = net_income / revenue
+            reported_margin = data.get('net_margin', calculated_margin)
+            if abs(calculated_margin - reported_margin) > 0.05:
+                data['net_margin'] = calculated_margin
+                logger.info(f"修复净利率: {reported_margin:.3f} -> {calculated_margin:.3f}")
+        
+        # 修复ROE
+        if shareholders_equity > 0 and net_income > 0:
+            calculated_roe = net_income / shareholders_equity
+            reported_roe = data.get('roe', calculated_roe)
+            if abs(calculated_roe - reported_roe) > 0.05:
+                data['roe'] = calculated_roe
+                logger.info(f"修复ROE: {reported_roe:.3f} -> {calculated_roe:.3f}")
+        
+        # 修复ROA
+        if total_assets > 0 and net_income > 0:
+            calculated_roa = net_income / total_assets
+            reported_roa = data.get('roa', calculated_roa)
+            if abs(calculated_roa - reported_roa) > 0.05:
+                data['roa'] = calculated_roa
+                logger.info(f"修复ROA: {reported_roa:.3f} -> {calculated_roa:.3f}")
                 rules = self.validation_rules[field]
                 
                 try:

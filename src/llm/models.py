@@ -144,10 +144,23 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         return ChatAnthropic(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.DEEPSEEK:
         api_key = os.getenv("DEEPSEEK_API_KEY")
+        base_url = os.getenv("DEEPSEEK_BASE_URL")
         if not api_key:
             print(f"API Key Error: Please make sure DEEPSEEK_API_KEY is set in your .env file.")
             raise ValueError("DeepSeek API key not found.  Please make sure DEEPSEEK_API_KEY is set in your .env file.")
-        return ChatDeepSeek(model=model_name, api_key=api_key)
+        
+        # 创建ChatDeepSeek实例，尝试支持base_url
+        kwargs = {"model": model_name, "api_key": api_key}
+        if base_url:
+            # 尝试设置base_url，如果ChatDeepSeek支持的话
+            try:
+                return ChatDeepSeek(model=model_name, api_key=api_key, base_url=base_url)
+            except TypeError:
+                # 如果不支持base_url参数，则只使用api_key
+                print(f"Warning: ChatDeepSeek does not support base_url parameter. Using default endpoint.")
+                return ChatDeepSeek(model=model_name, api_key=api_key)
+        else:
+            return ChatDeepSeek(model=model_name, api_key=api_key)
     elif model_provider == ModelProvider.GOOGLE:
         api_key = os.getenv("GOOGLE_API_KEY")
         if not api_key:

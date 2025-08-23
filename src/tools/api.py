@@ -35,13 +35,15 @@ except ImportError:
     ak = None
     akshare_helper = None
 
-# 导入Yahoo财经适配器
+# 导入技术指标计算库
 try:
-    from src.utils.yahoo_finance_adapter import yahoo_adapter
-    HAS_YAHOO_FINANCE = True
+    import talib
+    HAS_TALIB = True
 except ImportError:
-    HAS_YAHOO_FINANCE = False
-    yahoo_adapter = None
+    HAS_TALIB = False
+    talib = None
+
+
 
 
 
@@ -479,47 +481,47 @@ def _make_api_request(url: str, headers: dict, method: str = "GET", json_data: d
 
 @rate_limit()
 def get_prices(ticker: str, start_date: str, end_date: str) -> list[Price]:
-    """获取价格数据 - 支持多数据源优先级策略"""
+    """获取价格数据 - 支持多数据源优先级策略，增强数据完整性检查"""
     
     # 检查参数有效性
     if not start_date or not end_date:
         print(f"Error: start_date or end_date is None for {ticker}")
         return []
     
+    # 验证日期格式
+    try:
+        from datetime import datetime
+        datetime.strptime(start_date, '%Y-%m-%d')
+        datetime.strptime(end_date, '%Y-%m-%d')
+    except ValueError as e:
+        print(f"Error: Invalid date format for {ticker}: {e}")
+        return []
+    
     # Check cache first
     cache_key = f"{ticker}_{start_date}_{end_date}"
     if cached_data := _cache.get_prices(cache_key):
-        return [Price(**price) for price in cached_data]
+        cached_prices = [Price(**price) for price in cached_data]
+        # 验证缓存数据完整性
+        if _validate_price_data_completeness(cached_prices, start_date, end_date):
+            print(f"Using cached price data for {ticker}: {len(cached_prices)} records")
+            return cached_prices
+        else:
+            print(f"Cached data incomplete for {ticker}, fetching fresh data")
 
     try:
         market = _detect_market(ticker)
         
-        if market == 'CN':
-            # 中国A股：优先使用AKShare，Yahoo作为补充
-            prices = _get_prices_akshare(ticker, start_date, end_date)
-            
-            # 如果AKShare获取失败或数据不足，使用Yahoo财经补充
-            if not prices and HAS_YAHOO_FINANCE and yahoo_adapter:
-                print(f"AKShare数据获取失败，尝试使用Yahoo财经: {ticker}")
-                prices = _get_prices_yahoo(ticker, start_date, end_date)
-            
-
-                
-        else:
-            # 港股和美股：优先使用Yahoo财经，AKShare作为备选
-            prices = []
-            if HAS_YAHOO_FINANCE and yahoo_adapter:
-                prices = _get_prices_yahoo(ticker, start_date, end_date)
-            
-            # 如果Yahoo获取失败，尝试AKShare（主要针对港股）
-            if not prices and HAS_AKSHARE and market == 'HK':
-                print(f"Yahoo财经数据获取失败，尝试使用AKShare: {ticker}")
-                prices = _get_prices_akshare(ticker, start_date, end_date)
+        # 使用AKShare获取价格数据
+        prices = _get_prices_akshare(ticker, start_date, end_date)
         
-        # 缓存结果
-        if prices:
+        # 验证数据完整性
+        if prices and _validate_price_data_quality(prices, ticker):
             _cache.set_prices(cache_key, [price.model_dump() for price in prices])
             print(f"Successfully fetched {len(prices)} price records for {ticker}")
+        elif prices:
+            print(f"Warning: Price data quality issues detected for {ticker}, but using available data")
+        else:
+            print(f"Warning: No price data available for {ticker}")
         
         return prices
 
@@ -585,22 +587,60 @@ def _get_prices_akshare(ticker: str, start_date: str, end_date: str) -> list[Pri
     return []
 
 
-def _get_prices_yahoo(ticker: str, start_date: str, end_date: str) -> list[Price]:
-    """使用Yahoo财经获取价格数据"""
-    if not HAS_YAHOO_FINANCE or not yahoo_adapter:
-        return []
+
+
+
+
+
+
+def _validate_price_data_completeness(prices: list[Price], start_date: str, end_date: str) -> bool:
+    """验证价格数据的完整性"""
+    if not prices:
+        return False
     
     try:
-        df = yahoo_adapter.get_historical_data(ticker, start_date, end_date)
-        if df is not None and not df.empty:
-            return _convert_yahoo_to_prices(df, ticker)
-    except Exception as e:
-        print(f"Yahoo财经获取数据失败 {ticker}: {e}")
+        from datetime import datetime, timedelta
+        start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+        end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+        
+        # 计算期望的交易日数量（粗略估计，不考虑节假日）
+        total_days = (end_dt - start_dt).days + 1
+        expected_trading_days = total_days * 5 / 7  # 假设一周5个交易日
+        
+        # 如果实际数据量少于期望的70%，认为数据不完整
+        completeness_ratio = len(prices) / expected_trading_days
+        return completeness_ratio >= 0.7
+        
+    except Exception:
+        return True  # 如果验证失败，假设数据完整
+
+
+def _validate_price_data_quality(prices: list[Price], ticker: str) -> bool:
+    """验证价格数据的质量"""
+    if not prices:
+        return False
     
-    return []
-
-
-
+    try:
+        # 检查是否有有效的收盘价
+        valid_prices = [p for p in prices if p.close and p.close > 0]
+        if len(valid_prices) < len(prices) * 0.8:  # 至少80%的数据有有效收盘价
+            print(f"Warning: {ticker} has too many invalid price records")
+            return False
+        
+        # 检查价格是否有异常波动（单日涨跌超过50%可能是数据错误）
+        for i in range(1, len(valid_prices)):
+            prev_close = valid_prices[i-1].close
+            curr_close = valid_prices[i].close
+            if prev_close > 0:
+                change_ratio = abs(curr_close - prev_close) / prev_close
+                if change_ratio > 0.5:  # 50%的异常波动
+                    print(f"Warning: {ticker} has suspicious price movement on {valid_prices[i].time}")
+        
+        return True
+        
+    except Exception as e:
+        print(f"Error validating price data quality for {ticker}: {e}")
+        return True  # 如果验证失败，假设数据质量可接受
 
 
 def _convert_akshare_to_prices(df: pd.DataFrame, ticker: str, is_hk: bool = False) -> list[Price]:
@@ -645,20 +685,43 @@ def _convert_akshare_to_prices(df: pd.DataFrame, ticker: str, is_hk: bool = Fals
         df['close'] = pd.to_numeric(df['close'], errors='coerce')
         df['volume'] = pd.to_numeric(df['volume'], errors='coerce')
         
+        # 数据清洗：移除无效行
+        df = df.dropna(subset=['close'])  # 移除收盘价为空的行
+        df = df[df['close'] > 0]  # 移除收盘价为0或负数的行
+        
+        # 按日期排序
+        df = df.sort_values('time')
+        
         # 转换为Price对象
         prices = []
         for _, row in df.iterrows():
-            if not pd.isna(row['close']):
+            try:
+                # 验证数据合理性
+                close_price = float(row['close'])
+                open_price = float(row['open']) if not pd.isna(row['open']) else close_price
+                high_price = float(row['high']) if not pd.isna(row['high']) else close_price
+                low_price = float(row['low']) if not pd.isna(row['low']) else close_price
+                volume = int(row['volume']) if not pd.isna(row['volume']) and row['volume'] >= 0 else 0
+                
+                # 基本合理性检查
+                if high_price < close_price or low_price > close_price:
+                    # 如果高低价不合理，使用收盘价作为默认值
+                    high_price = max(high_price, close_price, open_price)
+                    low_price = min(low_price, close_price, open_price)
+                
                 prices.append(Price(
-                    open=float(row['open']) if not pd.isna(row['open']) else 0,
-                    close=float(row['close']),
-                    high=float(row['high']) if not pd.isna(row['high']) else 0,
-                    low=float(row['low']) if not pd.isna(row['low']) else 0,
-                    volume=int(row['volume']) if not pd.isna(row['volume']) else 0,
+                    open=open_price,
+                    close=close_price,
+                    high=high_price,
+                    low=low_price,
+                    volume=volume,
                     time=str(row['time'])
                 ))
+            except (ValueError, TypeError) as e:
+                print(f"Warning: Skipping invalid price record for {ticker}: {e}")
+                continue
         
-        print(f"✓ AKShare数据转换成功: {ticker} - {len(prices)} 条")
+        print(f"✓ AKShare数据转换成功: {ticker} - {len(prices)} 条 (原始: {len(df)} 条)")
         return prices
         
     except Exception as e:
@@ -666,84 +729,7 @@ def _convert_akshare_to_prices(df: pd.DataFrame, ticker: str, is_hk: bool = Fals
         return []
 
 
-def _convert_yahoo_to_prices(df: pd.DataFrame, ticker: str) -> list[Price]:
-    """将Yahoo财经数据转换为Price对象"""
-    try:
-        # 确保必要的列存在
-        required_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-        if not all(col in df.columns for col in required_columns):
-            print(f"Yahoo数据缺少必要的列: {ticker}")
-            return []
-        
-        # 转换为Price对象
-        prices = []
-        for _, row in df.iterrows():
-            if not pd.isna(row['Close']):
-                # 处理日期
-                if 'date' in df.columns:
-                    time_str = pd.to_datetime(row['date']).strftime('%Y-%m-%d')
-                else:
-                    time_str = pd.to_datetime(row.name).strftime('%Y-%m-%d')
-                
-                prices.append(Price(
-                    open=float(row['Open']) if not pd.isna(row['Open']) else 0,
-                    close=float(row['Close']),
-                    high=float(row['High']) if not pd.isna(row['High']) else 0,
-                    low=float(row['Low']) if not pd.isna(row['Low']) else 0,
-                    volume=int(row['Volume']) if not pd.isna(row['Volume']) else 0,
-                    time=time_str
-                ))
-        
-        print(f"✓ Yahoo财经数据转换成功: {ticker} - {len(prices)} 条")
-        return prices
-        
-    except Exception as e:
-        print(f"Yahoo数据转换失败 {ticker}: {e}")
-        return []
 
-
-# 添加支持财务指标的Yahoo数据获取函数
-
-def get_enhanced_financial_metrics(ticker: str) -> Dict[str, Any]:
-    """获取增强的财务指标，使用Yahoo财经的PE等数据"""
-    enhanced_metrics = {}
-    
-    # 使用Yahoo财经获取基本信息和关键指标
-    if HAS_YAHOO_FINANCE and yahoo_adapter:
-        try:
-            stock_info = yahoo_adapter.get_stock_info(ticker)
-            if stock_info:
-                # 优先使用Yahoo的PE数据
-                enhanced_metrics.update({
-                    'trailing_pe': stock_info.get('trailing_pe'),
-                    'forward_pe': stock_info.get('forward_pe'),
-                    'price_to_book': stock_info.get('price_to_book'),
-                    'price_to_sales': stock_info.get('price_to_sales_ttm'),
-                    'enterprise_to_revenue': stock_info.get('enterprise_to_revenue'),
-                    'enterprise_to_ebitda': stock_info.get('enterprise_to_ebitda'),
-                    'profit_margins': stock_info.get('profit_margins'),
-                    'gross_margins': stock_info.get('gross_margins'),
-                    'operating_margins': stock_info.get('operating_margins'),
-                    'return_on_assets': stock_info.get('return_on_assets'),
-                    'return_on_equity': stock_info.get('return_on_equity'),
-                    'current_price': stock_info.get('current_price'),
-                    'market_cap': stock_info.get('market_cap'),
-                    'dividend_yield': stock_info.get('dividend_yield'),
-                    'beta': stock_info.get('beta'),
-                    'data_source': 'yahoo_finance'
-                })
-                
-                # 使用Yahoo的数据增强器计算缺失指标
-                calculated_ratios = yahoo_adapter.calculate_financial_ratios(ticker, stock_info)
-                if calculated_ratios:
-                    enhanced_metrics.update(calculated_ratios)
-                    
-        except Exception as e:
-            print(f"Yahoo财经财务指标获取失败 {ticker}: {e}")
-    
-
-    
-    return enhanced_metrics
 
 
 @rate_limit()
@@ -765,83 +751,8 @@ def get_financial_metrics(
     try:
         market = _detect_market(ticker)
         
-        # 首先尝试获取Yahoo财经的增强指标（优先PE等关键指标）
-        enhanced_metrics = get_enhanced_financial_metrics(ticker)
-        
-        if market == 'CN':
-            # 中国A股：AKShare作为主要数据源，Yahoo作为补充
-            metrics = _get_financial_metrics_akshare(ticker, end_date, period, limit)
-            
-            # 用Yahoo的关键指标补充AKShare数据
-            if enhanced_metrics and metrics:
-                # 将Yahoo的关键指标合并到第一个metrics中
-                for key, value in enhanced_metrics.items():
-                    if value is not None:
-                        setattr(metrics[0], key, value)
-                        
-        else:
-            # 港股和美股：优先使用Yahoo财经
-            if enhanced_metrics:
-                # 创建基于Yahoo数据的FinancialMetrics对象
-                yahoo_metrics = FinancialMetrics(
-                    ticker=ticker,
-                    report_period=end_date,
-                    period=period.upper(),
-                    currency=enhanced_metrics.get('currency', 'USD'),
-                    market_cap=enhanced_metrics.get('market_cap'),
-                    enterprise_value=enhanced_metrics.get('enterprise_value'),
-                    price_to_earnings_ratio=enhanced_metrics.get('trailing_pe'),
-                    price_to_book_ratio=enhanced_metrics.get('price_to_book'),
-                    price_to_sales_ratio=enhanced_metrics.get('price_to_sales'),
-                    enterprise_value_to_ebitda_ratio=enhanced_metrics.get('enterprise_to_ebitda'),
-                    enterprise_value_to_revenue_ratio=enhanced_metrics.get('enterprise_to_revenue'),
-                    free_cash_flow_yield=None,
-                    peg_ratio=None,
-                    gross_margin=enhanced_metrics.get('gross_margins'),
-                    operating_margin=enhanced_metrics.get('operating_margins'),
-                    net_margin=enhanced_metrics.get('profit_margins'),
-                    return_on_equity=enhanced_metrics.get('return_on_equity'),
-                    return_on_assets=enhanced_metrics.get('return_on_assets'),
-                    return_on_invested_capital=None,
-                    asset_turnover=None,
-                    inventory_turnover=None,
-                    receivables_turnover=None,
-                    days_sales_outstanding=None,
-                    operating_cycle=None,
-                    working_capital_turnover=None,
-                    current_ratio=None,
-                    quick_ratio=None,
-                    cash_ratio=None,
-                    operating_cash_flow_ratio=None,
-                    debt_to_equity=None,
-                    debt_to_assets=None,
-                    interest_coverage=None,
-                    revenue_growth=None,
-                    earnings_growth=None,
-                    book_value_growth=None,
-                    earnings_per_share_growth=None,
-                    free_cash_flow_growth=None,
-                    operating_income_growth=None,
-                    ebitda_growth=None,
-                    payout_ratio=enhanced_metrics.get('payout_ratio'),
-                    earnings_per_share=enhanced_metrics.get('earnings_per_share'),
-                    book_value_per_share=None,
-                    free_cash_flow_per_share=enhanced_metrics.get('free_cash_flow_per_share')
-                )
-                metrics = [yahoo_metrics]
-                
-                # 尝试用AKShare补充缺失数据（主要针对港股）
-                if market == 'HK' and HAS_AKSHARE:
-                    akshare_metrics = _get_financial_metrics_akshare(ticker, end_date, period, limit)
-                    if akshare_metrics:
-                        # 合并AKShare的数据到Yahoo数据中
-                        _merge_financial_metrics(metrics[0], akshare_metrics[0])
-            else:
-                # Yahoo获取失败，尝试AKShare（主要针对港股）
-                if HAS_AKSHARE:
-                    metrics = _get_financial_metrics_akshare(ticker, end_date, period, limit)
-                else:
-                    metrics = []
+        # 使用AKShare获取财务指标数据
+        metrics = _get_financial_metrics_akshare(ticker, end_date, period, limit)
         
         # 缓存结果
         if metrics:
@@ -1459,6 +1370,330 @@ def prices_to_df(prices: list) -> pd.DataFrame:
     
     df.sort_index(inplace=True)
     return df
+
+
+# ==================== 增强数据获取函数 ====================
+
+@rate_limit()
+def get_volume_analysis_data(ticker: str, start_date: str, end_date: str) -> Dict[str, Any]:
+    """
+    获取成交量分析数据
+    """
+    if not HAS_AKSHARE:
+        return {"error": "AKShare未安装"}
+    
+    try:
+        symbol = _convert_cn_symbol(ticker)
+        
+        # 获取基础价格数据
+        df = ak.stock_zh_a_hist(symbol=symbol, period="daily", 
+                               start_date=start_date.replace('-', ''), 
+                               end_date=end_date.replace('-', ''), 
+                               adjust="qfq")
+        
+        if df.empty:
+            return {"error": "无法获取数据"}
+        
+        # 计算成交量指标
+        volume_data = {
+            "avg_volume_5d": df['成交量'].rolling(5).mean().iloc[-1] if len(df) >= 5 else None,
+            "avg_volume_20d": df['成交量'].rolling(20).mean().iloc[-1] if len(df) >= 20 else None,
+            "volume_ratio": df['成交量'].iloc[-1] / df['成交量'].rolling(20).mean().iloc[-1] if len(df) >= 20 else None,
+            "price_volume_trend": _calculate_price_volume_trend(df),
+            "volume_spike_days": _count_volume_spikes(df),
+            "money_flow_ratio": _calculate_money_flow_ratio(df)
+        }
+        
+        return volume_data
+        
+    except Exception as e:
+        return {"error": f"获取成交量数据失败: {str(e)}"}
+
+
+@rate_limit()
+def get_market_sentiment_data(ticker: str) -> Dict[str, Any]:
+    """
+    获取市场情绪数据
+    """
+    if not HAS_AKSHARE:
+        return {"error": "AKShare未安装"}
+    
+    try:
+        symbol = _convert_cn_symbol(ticker)
+        sentiment_data = {}
+        
+        # 获取资金流向数据
+        try:
+            money_flow = ak.stock_individual_fund_flow(stock=symbol, market="sh" if symbol.startswith("6") else "sz")
+            if not money_flow.empty:
+                latest_flow = money_flow.iloc[-1]
+                sentiment_data["money_flow"] = {
+                    "main_net_inflow": float(latest_flow.get('主力净流入-净额', 0)),
+                    "main_net_inflow_rate": float(latest_flow.get('主力净流入-净占比', 0)),
+                    "super_large_net_inflow": float(latest_flow.get('超大单净流入-净额', 0)),
+                    "large_net_inflow": float(latest_flow.get('大单净流入-净额', 0))
+                }
+        except Exception:
+            sentiment_data["money_flow"] = {"error": "资金流向数据获取失败"}
+        
+        # 获取龙虎榜数据
+        try:
+            lhb_data = ak.stock_lhb_detail_em(symbol=symbol, start_date="20240101", end_date="20241231")
+            sentiment_data["lhb_activity"] = len(lhb_data) if not lhb_data.empty else 0
+        except Exception:
+            sentiment_data["lhb_activity"] = 0
+        
+        return sentiment_data
+        
+    except Exception as e:
+        return {"error": f"获取市场情绪数据失败: {str(e)}"}
+
+
+@rate_limit()
+def get_technical_indicators_data(ticker: str, start_date: str, end_date: str) -> Dict[str, Any]:
+    """
+    获取技术指标数据 - 增强版本
+    使用专业的技术指标计算类，提供更准确和全面的技术分析数据
+    """
+    if not HAS_AKSHARE:
+        return {"error": "AKShare未安装", "details": "请安装akshare库以获取技术指标数据"}
+    
+    try:
+        # 首先尝试从缓存获取价格数据
+        prices = get_prices(ticker, start_date, end_date)
+        if not prices:
+            return {"error": "无法获取价格数据", "details": f"股票代码 {ticker} 在指定时间范围内无价格数据"}
+        
+        # 转换为DataFrame格式
+        df = prices_to_df(prices)
+        
+        if df.empty or len(df) < 20:
+            return {
+                "error": "数据不足，无法计算技术指标", 
+                "details": f"需要至少20个交易日的数据，当前只有{len(df)}个交易日",
+                "suggestion": "请扩大时间范围或检查股票代码是否正确"
+            }
+        
+        # 使用专业的技术指标计算类
+        try:
+            from src.utils.technical_indicators import TechnicalIndicators
+            indicators = TechnicalIndicators.calculate_all_indicators(df)
+            
+            # 添加当前价格和基础信息
+            indicators.update({
+                'current_price': df['close'].iloc[-1],
+                'price_change': df['close'].iloc[-1] - df['close'].iloc[-2] if len(df) > 1 else 0,
+                'price_change_pct': ((df['close'].iloc[-1] - df['close'].iloc[-2]) / df['close'].iloc[-2] * 100) if len(df) > 1 else 0,
+                'volume_latest': df['volume'].iloc[-1] if 'volume' in df.columns else 0,
+                'data_points': len(df),
+                'date_range': f"{df.index[0].strftime('%Y-%m-%d')} 至 {df.index[-1].strftime('%Y-%m-%d')}",
+                'calculation_methods': {
+                    'moving_averages': 'Simple Moving Average (SMA)',
+                    'macd': 'MACD(12,26,9) - 指数移动平均收敛发散',
+                    'rsi': 'RSI(14) - 相对强弱指数',
+                    'bollinger_bands': 'Bollinger Bands(20,2) - 布林带',
+                    'kdj': 'KDJ(9,3,3) - 随机指标',
+                    'volume_indicators': 'OBV, A/D Line - 成交量指标',
+                    'volatility': 'ATR, Bollinger Width - 波动率指标'
+                }
+            })
+            
+            return indicators
+            
+        except ImportError as ie:
+            # 如果无法导入技术指标类，使用简化版本
+            print(f"警告: 无法导入TechnicalIndicators类，使用简化计算: {ie}")
+            return _calculate_basic_indicators(df, ticker)
+            
+    except Exception as e:
+        error_msg = str(e)
+        return {
+            "error": f"获取技术指标数据失败: {error_msg}", 
+            "details": f"处理股票 {ticker} 时发生错误",
+            "troubleshooting": [
+                "检查股票代码格式是否正确",
+                "确认时间范围是否合理",
+                "验证网络连接是否正常",
+                "检查AKShare库是否正常工作"
+            ]
+        }
+
+
+def _calculate_basic_indicators(df: pd.DataFrame, ticker: str) -> Dict[str, Any]:
+    """
+    计算基础技术指标（备用方案）
+    """
+    try:
+        indicators = {}
+        
+        # 移动平均线
+        indicators["ma5"] = _safe_float(df['close'].rolling(5).mean().iloc[-1])
+        indicators["ma10"] = _safe_float(df['close'].rolling(10).mean().iloc[-1])
+        indicators["ma20"] = _safe_float(df['close'].rolling(20).mean().iloc[-1])
+        indicators["ma60"] = _safe_float(df['close'].rolling(60).mean().iloc[-1]) if len(df) >= 60 else None
+        
+        # MACD
+        exp1 = df['close'].ewm(span=12).mean()
+        exp2 = df['close'].ewm(span=26).mean()
+        macd_line = exp1 - exp2
+        signal_line = macd_line.ewm(span=9).mean()
+        histogram = macd_line - signal_line
+        
+        indicators["macd"] = {
+            "macd_line": _safe_float(macd_line.iloc[-1]),
+            "signal_line": _safe_float(signal_line.iloc[-1]),
+            "histogram": _safe_float(histogram.iloc[-1])
+        }
+        
+        # RSI
+        delta = df['close'].diff()
+        gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+        loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+        rs = gain / loss
+        rsi = 100 - (100 / (1 + rs))
+        indicators["rsi"] = _safe_float(rsi.iloc[-1])
+        
+        # 布林带
+        bb_period = 20
+        bb_std = 2
+        bb_middle = df['close'].rolling(bb_period).mean()
+        bb_std_dev = df['close'].rolling(bb_period).std()
+        bb_upper = bb_middle + (bb_std_dev * bb_std)
+        bb_lower = bb_middle - (bb_std_dev * bb_std)
+        
+        indicators["bollinger_bands"] = {
+            "upper": _safe_float(bb_upper.iloc[-1]),
+            "middle": _safe_float(bb_middle.iloc[-1]),
+            "lower": _safe_float(bb_lower.iloc[-1]),
+            "position": _safe_float((df['close'].iloc[-1] - bb_lower.iloc[-1]) / (bb_upper.iloc[-1] - bb_lower.iloc[-1]))
+        }
+        
+        # KDJ
+        low_min = df['low'].rolling(9).min()
+        high_max = df['high'].rolling(9).max()
+        rsv = (df['close'] - low_min) / (high_max - low_min) * 100
+        k = rsv.ewm(com=2).mean()
+        d = k.ewm(com=2).mean()
+        j = 3 * k - 2 * d
+        
+        indicators["kdj"] = {
+            "k": _safe_float(k.iloc[-1]),
+            "d": _safe_float(d.iloc[-1]),
+            "j": _safe_float(j.iloc[-1])
+        }
+        
+        # 添加基础信息
+        indicators.update({
+            'current_price': _safe_float(df['close'].iloc[-1]),
+            'data_points': len(df),
+            'calculation_mode': 'basic',
+            'note': '使用基础计算方法'
+        })
+        
+        return indicators
+        
+    except Exception as e:
+        return {"error": f"基础指标计算失败: {str(e)}"}
+
+
+@rate_limit()
+def get_industry_analysis_data(ticker: str) -> Dict[str, Any]:
+    """
+    获取行业分析数据
+    """
+    if not HAS_AKSHARE:
+        return {"error": "AKShare未安装"}
+    
+    try:
+        symbol = _convert_cn_symbol(ticker)
+        industry_data = {}
+        
+        # 获取股票基本信息
+        try:
+            stock_info = ak.stock_individual_info_em(symbol=symbol)
+            if not stock_info.empty:
+                industry_data["industry"] = stock_info[stock_info['item'] == '行业']['value'].iloc[0] if len(stock_info[stock_info['item'] == '行业']) > 0 else "未知"
+                industry_data["concept"] = stock_info[stock_info['item'] == '概念']['value'].iloc[0] if len(stock_info[stock_info['item'] == '概念']) > 0 else "未知"
+        except Exception:
+            industry_data["industry"] = "未知"
+            industry_data["concept"] = "未知"
+        
+        # 获取行业资金流向
+        try:
+            industry_flow = ak.stock_sector_fund_flow_rank(indicator="今日", sector_type="行业资金流")
+            if not industry_flow.empty and industry_data.get("industry") != "未知":
+                industry_row = industry_flow[industry_flow['名称'].str.contains(industry_data["industry"][:2])]
+                if not industry_row.empty:
+                    industry_data["industry_flow"] = {
+                        "net_inflow": float(industry_row['净流入'].iloc[0]),
+                        "net_inflow_rate": float(industry_row['净流入率'].iloc[0]),
+                        "rank": int(industry_row.index[0] + 1)
+                    }
+        except Exception:
+            industry_data["industry_flow"] = {"error": "行业资金流向数据获取失败"}
+        
+        return industry_data
+        
+    except Exception as e:
+        return {"error": f"获取行业分析数据失败: {str(e)}"}
+
+
+# ==================== 辅助计算函数 ====================
+
+def _calculate_price_volume_trend(df: pd.DataFrame) -> float:
+    """
+    计算价量趋势相关性
+    """
+    try:
+        if len(df) < 10:
+            return 0.0
+        
+        price_change = df['收盘'].pct_change().dropna()
+        volume_change = df['成交量'].pct_change().dropna()
+        
+        if len(price_change) != len(volume_change):
+            min_len = min(len(price_change), len(volume_change))
+            price_change = price_change.iloc[-min_len:]
+            volume_change = volume_change.iloc[-min_len:]
+        
+        correlation = price_change.corr(volume_change)
+        return correlation if not pd.isna(correlation) else 0.0
+    except Exception:
+        return 0.0
+
+
+def _count_volume_spikes(df: pd.DataFrame, threshold: float = 2.0) -> int:
+    """
+    统计成交量异常放大的天数
+    """
+    try:
+        if len(df) < 20:
+            return 0
+        
+        avg_volume = df['成交量'].rolling(20).mean()
+        volume_ratio = df['成交量'] / avg_volume
+        spikes = (volume_ratio > threshold).sum()
+        return int(spikes)
+    except Exception:
+        return 0
+
+
+def _calculate_money_flow_ratio(df: pd.DataFrame) -> float:
+    """
+    计算资金流入流出比例
+    """
+    try:
+        if len(df) < 5:
+            return 0.0
+        
+        # 简化的资金流向计算：上涨日成交额 / 总成交额
+        up_days = df['涨跌幅'] > 0
+        total_turnover = df['成交额'].sum()
+        up_turnover = df[up_days]['成交额'].sum()
+        
+        return float(up_turnover / total_turnover) if total_turnover > 0 else 0.0
+    except Exception:
+        return 0.0
 
 
 @rate_limit()

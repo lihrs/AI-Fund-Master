@@ -13,7 +13,7 @@ Ollama环境检测工具
 python check_ollama_env.py [model_name]
 
 示例:
-python check_ollama_env.py qwen3:0.6b
+python check_ollama_env.py qwen3:4b
 """
 
 import os
@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Optional, List
 
 class OllamaChecker:
-    def __init__(self, model_name: str = "qwen3:0.6b"):
+    def __init__(self, model_name: str = "qwen3:4b"):
         self.model_name = model_name
         self.ollama_exe_path = None
         
@@ -460,10 +460,10 @@ def main():
         print("Ollama Environment Checker / Ollama环境检测工具")
         print()
         print("Arguments:")
-        print("  model_name    Target model to check/download (default: qwen3:0.6b)")
+        print("  model_name    Target model to check/download (default: qwen3:4b)")
         print("Examples:")
         print("  python check_ollama_env.py")
-        print("  python check_ollama_env.py qwen3:0.6b")
+        print("  python check_ollama_env.py qwen3:4b")
         print("Functions:")
         print("  1. Check GUI config provider setting / 检查GUI配置的供应商设置")
         print("  2. Find Ollama.exe in Windows system / 查找Windows系统中的Ollama.exe")
@@ -477,7 +477,7 @@ def main():
     check_gui_config()
     
     # 获取命令行参数
-    model_name = "qwen3:0.6b"  # 默认模型
+    model_name = "qwen3:4b"  # 默认模型
     if len(sys.argv) > 1:
         model_name = sys.argv[1]
     

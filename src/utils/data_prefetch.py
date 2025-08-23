@@ -209,7 +209,7 @@ class DataPrefetcher:
                 # 添加延迟防止API频率限制
                 time.sleep(3)
                 
-                # 11. 对所有获取的数据进行质量验证和修复（新增）
+                # 11. 对所有获取的数据进行质量验证和修复（增强版）
                 progress.update_status("data_prefetch", ticker, "Validating and repairing data quality")
                 try:
                     # 合并所有财务数据用于验证
@@ -223,7 +223,17 @@ class DataPrefetcher:
                         elif isinstance(latest_metrics, dict):
                             all_financial_data.update(latest_metrics)
                     
-                    # 已删除AKShare财务指标的引用
+                    # 添加财务报表项目数据
+                    if ticker_data.get("line_items"):
+                        for item in ticker_data["line_items"]:
+                            if hasattr(item, 'name') and hasattr(item, 'value'):
+                                all_financial_data[item.name] = item.value
+                            elif isinstance(item, dict):
+                                all_financial_data.update(item)
+                    
+                    # 添加市值数据
+                    if ticker_data.get("market_cap"):
+                        all_financial_data['market_cap'] = ticker_data["market_cap"]
                     
                     # 添加AKShare综合数据
                     if ticker_data.get("akshare_comprehensive_data"):
@@ -231,16 +241,33 @@ class DataPrefetcher:
                     
                     # 进行数据质量验证和修复
                     if all_financial_data:
-                        validated_data = akshare_adapter.validate_and_repair_data(all_financial_data)
+                        # 使用数据质量修复器进行验证
+                        from src.utils.data_quality_fix import DataQualityFixer
+                        quality_fixer = DataQualityFixer()
+                        
+                        # 生成数据质量报告
+                        quality_report = quality_fixer.generate_quality_report(ticker, all_financial_data)
+                        ticker_data["data_quality_report"] = quality_report
+                        
+                        # 修复数据质量问题
+                        repaired_data = quality_fixer.repair_data_issues(all_financial_data)
+                        
+                        # 使用AKShare适配器进行进一步验证
+                        validated_data = akshare_adapter.validate_and_repair_data(repaired_data)
                         ticker_data["validated_financial_data"] = validated_data
-                        print(f"✓ {ticker} 数据质量验证和修复完成")
+                        
+                        print(f"✓ {ticker} 数据质量验证和修复完成 (质量等级: {quality_report.quality_level.value})")
+                        if quality_report.warnings:
+                            print(f"  警告: {'; '.join(quality_report.warnings[:3])}")
                     else:
                         ticker_data["validated_financial_data"] = {}
+                        ticker_data["data_quality_report"] = None
                         print(f"✗ {ticker} 没有可验证的财务数据")
                         
                 except Exception as e:
                     print(f"✗ {ticker} 数据质量验证和修复异常: {e}")
                     ticker_data["validated_financial_data"] = {}
+                    ticker_data["data_quality_report"] = None
                 
                 progress.update_status("data_prefetch", ticker, "Data prefetch complete")
                 

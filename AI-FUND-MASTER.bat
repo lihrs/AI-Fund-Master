@@ -105,80 +105,10 @@ if exist "pyproject.toml" (
 )
 
 
-
-
-
-echo Checking Ollama installation...
-
-REM Check if Ollama is in PATH
-where ollama >nul 2>&1
-if %errorlevel% equ 0 (
-    echo Ollama found in PATH.
-    echo Current Ollama location:
-    where ollama
-    goto :endOllamaSetup
-)
-
-echo Ollama not found in PATH.
-echo Adding Ollama to PATH...
-
-REM Define Ollama installation path
-set "OLLAMA_PATH=%userprofile%\AppData\Local\Programs\Ollama"
-
-REM Check if Ollama directory exists
-if not exist "%OLLAMA_PATH%" (
-    echo Error: Ollama directory not found at %OLLAMA_PATH%
-    echo Please install Ollama first.
-    pause
-    goto :endOllamaSetup
-)
-
-REM Check if Ollama executable exists
-if not exist "%OLLAMA_PATH%\ollama.exe" (
-    echo Error: ollama.exe not found in %OLLAMA_PATH%
-    echo Please check your Ollama installation.
-    pause
-    goto :endOllamaSetup
-)
-
-REM Get current PATH
-for /f "tokens=2*" %%a in ('reg query "HKCU\Environment" /v PATH 2^>nul') do set "CURRENT_PATH=%%b"
-
-REM Check if Ollama path is already in PATH
-echo %CURRENT_PATH% | findstr /i "%OLLAMA_PATH%" >nul
-if %errorlevel% equ 0 (
-    echo Ollama path already exists in PATH.
-    goto :endOllamaSetup
-)
-
-REM Add Ollama to PATH
-if defined CURRENT_PATH (
-    set "NEW_PATH=%CURRENT_PATH%;%OLLAMA_PATH%"
-) else (
-    set "NEW_PATH=%OLLAMA_PATH%"
-)
-
-Set PATH=%PATH%;%OLLAMA_PATH%
-
-REM Update PATH in registry
-reg add "HKCU\Environment" /v PATH /t REG_EXPAND_SZ /d "%NEW_PATH%" /f >nul
-if %errorlevel% equ 0 (
-    echo Successfully added Ollama to PATH.
-    echo New PATH: %NEW_PATH%
-    echo Please restart your command prompt or reboot to apply changes.
-) else (
-    echo Error: Failed to update PATH.
-    echo Please run this script as administrator.
-)
-
-:endOllamaSetup
-
-uv run check_ollama_env.py qwen3:4b
-
 :launch_gui
 echo [5/5] Launching GUI application...
-if not exist "gui.py" (
-    echo  gui.py not found
+if not exist "gui-pyqt5.py" (
+    echo  gui-pyqt5.py not found
     pause
     exit /b 1
 )
@@ -186,7 +116,7 @@ if not exist "gui.py" (
 echo Starting ...
 echo.
 
-uv run gui.py
+uv run gui-pyqt5.py
 
 
 if errorlevel 1 (

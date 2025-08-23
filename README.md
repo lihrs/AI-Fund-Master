@@ -4,7 +4,8 @@
 
 **12位投资大师 | 支持A股 | 本地AI | 专业分析**
 
-<img width="1016" height="739" alt="afm-1" src="https://github.com/user-attachments/assets/8be945fc-9d32-47a7-8c38-3d8312116071" />
+<img width="1018" height="747" alt="afmc-1" src="https://github.com/user-attachments/assets/04d9727f-6d8a-48da-be11-3cc907299d0a" />
+
 
 
 ## 项目特色

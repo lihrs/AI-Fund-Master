@@ -272,9 +272,9 @@ class OllamaChecker:
         
         print(f"Available models / 可用模型: {', '.join(models)}")
         
-        # 检查完全匹配或部分匹配
+        # 检查完全匹配
         for model in models:
-            if model == self.model_name or model.startswith(self.model_name.split(':')[0]):
+            if model == self.model_name:
                 print(f"✓ Model '{model}' found / 找到模型 '{model}'")
                 return True
         

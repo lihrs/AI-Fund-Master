@@ -1,4 +1,4 @@
-# AI 基金大师 - 智能投资分析系统
+# AI 基金大师 - 智能投资分析系统  [另一产品：AI股票大师](https://github.com/hengruiyun/AI-Stock-Master)
 
 **基于AI的智能投资分析系统，专为中国市场设计**
 

@@ -2093,7 +2093,7 @@ def create_config_tab():
     provider_model_layout.addWidget(QLabel("供应商:"))
     
     g_widgets['provider_combo'] = QComboBox()
-    g_widgets['provider_combo'].addItems(["DeepSeek", "Ollama"])
+    g_widgets['provider_combo'].addItems(["DeepSeek", "Ollama", "SiliconFlow"])
     g_widgets['provider_combo'].setCurrentIndex(0)  # 默认选择DeepSeek
     g_widgets['provider_combo'].currentTextChanged.connect(on_provider_changed)
     provider_model_layout.addWidget(g_widgets['provider_combo'])

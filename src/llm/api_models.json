@@ -5,6 +5,11 @@
     "provider": "Anthropic"
   },
   {
+    "display_name": "Qwen/Qwen3-8B",
+    "model_name": "Qwen/Qwen3-8B",
+    "provider": "SiliconFlow"
+  },
+  {
     "display_name": "Claude Sonnet 4",
     "model_name": "claude-sonnet-4-20250514",
     "provider": "Anthropic"

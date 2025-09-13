@@ -17,6 +17,7 @@ class ModelProvider(str, Enum):
 
     ALIBABA = "Alibaba"
     ANTHROPIC = "Anthropic"
+    SILICONFLOW = "SiliconFlow"
     DEEPSEEK = "DeepSeek"
     GOOGLE = "Google"
     GROQ = "Groq"

@@ -290,3 +290,31 @@ AI-FUND-MASTER.bat
 **让AI为您的投资决策提供专业支持**
 
 </div>
+
+
+## 本地开发运行教程编写
+
+### 环境准备
+- **Python 3.11**
+- **uv** 包管理器
+- **Ollama** 本地大语言模型
+
+### 安装依赖
+1. 克隆项目仓库：
+   ```bash
+   git clone https://github.com/yourusername/ai-hedge-fund.git
+   cd ai-hedge-fund
+   ```
+2. 创建虚拟环境并激活：
+   ```bash
+   python -m venv env
+   source env/bin/activate
+   ```
+3. 安装项目依赖：
+   ```bash
+   pip install -r requirements.txt
+   ```
+4. 运行项目：
+   ```bash
+    python gui-pyqt5.py
+   ```

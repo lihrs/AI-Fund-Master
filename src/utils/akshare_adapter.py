@@ -13,6 +13,10 @@ class AKShareAdapter:
     def _safe_get_data(self, func, *args, **kwargs):
         """安全获取数据，不进行重试"""
         try:
+            # 记录调用信息，便于调试
+            func_name = getattr(func, '__name__', str(func))
+            self.logger.debug(f"调用API: {func_name}, 参数: {args}, {kwargs}")
+            
             result = func(*args, **kwargs)
             # 检查result是否为None，然后检查是否有empty属性且不为空
             if result is not None:
@@ -20,17 +24,21 @@ class AKShareAdapter:
                     if not result.empty:
                         return result
                     else:
+                        self.logger.debug(f"API返回空DataFrame: {func_name}, 参数: {args}, {kwargs}")
                         return None
                 else:
                     # 如果没有empty属性，可能是其他类型的数据，直接返回
                     return result
             else:
+                self.logger.debug(f"API返回None: {func_name}, 参数: {args}, {kwargs}")
                 return None
         except (TypeError, AttributeError, KeyError, IndexError, ValueError) as e:
-            # 静默处理所有常见错误，不输出警告
+            # 记录常见错误，但不输出警告
+            self.logger.debug(f"API调用常见错误: {func.__name__ if hasattr(func, '__name__') else str(func)}, 错误: {e}")
             return None
         except Exception as e:
-            # 静默处理其他所有错误
+            # 记录其他所有错误
+            self.logger.debug(f"API调用未知错误: {func.__name__ if hasattr(func, '__name__') else str(func)}, 错误: {e}")
             return None
     
     def get_financial_statements(self, stock_code: str) -> Dict[str, Any]:
@@ -85,11 +93,19 @@ class AKShareAdapter:
             except Exception as e:
                 self.logger.warning(f"获取主要财务指标失败: {e}")
             
-            # 获取估值指标
+            # 获取估值指标 (使用东方财富个股信息替代)
             try:
-                valuation = self._safe_get_data(ak.stock_a_indicator_lg, symbol=stock_code)
+                valuation = self._safe_get_data(ak.stock_individual_info_em, symbol=stock_code)
                 if valuation is not None and not valuation.empty:
-                    indicators['valuation'] = valuation.to_dict('records')
+                    # 转换数据格式以匹配原来的结构
+                    valuation_data = valuation.iloc[0].to_dict()
+                    formatted_valuation = {
+                        '市盈率': valuation_data.get('市盈率-动态'),
+                        '市净率': valuation_data.get('市净率'),
+                        '股息率': valuation_data.get('股息率'),
+                        '日期': pd.Timestamp.now().strftime('%Y-%m-%d')
+                    }
+                    indicators['valuation'] = [formatted_valuation]
             except Exception as e:
                 self.logger.warning(f"获取估值指标失败: {e}")
             
@@ -150,7 +166,7 @@ class AKShareAdapter:
                     # 转换时间列为datetime，处理None值
                     macro_data = macro_data.dropna(subset=['时间'])
                     if not macro_data.empty:
-                        macro_data['时间'] = pd.to_datetime(macro_data['时间'], errors='coerce')
+                        macro_data['时间'] = pd.to_datetime(macro_data['时间'], format='%Y-%m-%d', errors='coerce')
                         # 删除时间转换失败的行
                         macro_data = macro_data.dropna(subset=['时间'])
                         if not macro_data.empty:
@@ -525,36 +541,56 @@ class AKShareAdapter:
             # 获取历史行情数据
             hist_data = self._safe_get_data(ak.stock_zh_a_hist, symbol=stock_code, period='daily', adjust='qfq')
             if hist_data is not None and not hist_data.empty:
+                # 检查是否存在'close'列，如果不存在，尝试使用'收盘'列
+                if 'close' not in hist_data.columns:
+                    if '收盘' in hist_data.columns:
+                        hist_data['close'] = hist_data['收盘']
+                    else:
+                        self.logger.warning(f"获取历史行情数据失败: 'close'列不存在且无法找到替代列")
+                        return historical_data
+                
                 # 计算技术指标
-                latest_price = hist_data['close'].iloc[-1] if 'close' in hist_data.columns else None
+                latest_price = hist_data['close'].iloc[-1]
                 if latest_price:
                     historical_data['latest_price'] = latest_price
                 
                 # 计算价格变化
                 if len(hist_data) >= 2:
-                    price_change = hist_data['close'].iloc[-1] - hist_data['close'].iloc[-2]
-                    price_change_pct = (price_change / hist_data['close'].iloc[-2]) * 100
-                    historical_data['price_change'] = price_change
-                    historical_data['price_change_pct'] = price_change_pct
+                    try:
+                        price_change = hist_data['close'].iloc[-1] - hist_data['close'].iloc[-2]
+                        price_change_pct = (price_change / hist_data['close'].iloc[-2]) * 100
+                        historical_data['price_change'] = price_change
+                        historical_data['price_change_pct'] = price_change_pct
+                    except Exception as e:
+                        self.logger.warning(f"计算价格变化失败: {e}")
                 
                 # 计算移动平均线
                 if len(hist_data) >= 20:
-                    ma20 = hist_data['close'].rolling(window=20).mean().iloc[-1]
-                    historical_data['ma20'] = ma20
-                    if latest_price:
-                        historical_data['price_vs_ma20'] = ((latest_price - ma20) / ma20) * 100
+                    try:
+                        ma20 = hist_data['close'].rolling(window=20).mean().iloc[-1]
+                        historical_data['ma20'] = ma20
+                        if latest_price:
+                            historical_data['price_vs_ma20'] = ((latest_price - ma20) / ma20) * 100
+                    except Exception as e:
+                        self.logger.warning(f"计算MA20失败: {e}")
                 
                 if len(hist_data) >= 50:
-                    ma50 = hist_data['close'].rolling(window=50).mean().iloc[-1]
-                    historical_data['ma50'] = ma50
-                    if latest_price:
-                        historical_data['price_vs_ma50'] = ((latest_price - ma50) / ma50) * 100
+                    try:
+                        ma50 = hist_data['close'].rolling(window=50).mean().iloc[-1]
+                        historical_data['ma50'] = ma50
+                        if latest_price:
+                            historical_data['price_vs_ma50'] = ((latest_price - ma50) / ma50) * 100
+                    except Exception as e:
+                        self.logger.warning(f"计算MA50失败: {e}")
                 
                 # 计算波动率
                 if len(hist_data) >= 30:
-                    returns = hist_data['close'].pct_change().dropna()
-                    volatility = returns.std() * (252 ** 0.5) * 100  # 年化波动率
-                    historical_data['volatility'] = volatility
+                    try:
+                        returns = hist_data['close'].pct_change().dropna()
+                        volatility = returns.std() * (252 ** 0.5) * 100  # 年化波动率
+                        historical_data['volatility'] = volatility
+                    except Exception as e:
+                        self.logger.warning(f"计算波动率失败: {e}")
                 
                 # 计算最高最低价
                 high_52w = hist_data['high'].max() if 'high' in hist_data.columns else None
@@ -1356,6 +1392,7 @@ class AKShareAdapter:
         """从财务摘要中提取资产负债表相关数据"""
         try:
             if df_abstract is None or df_abstract.empty:
+                self.logger.debug("财务摘要数据为空，无法提取资产负债表数据")
                 return None
             
             # 检查必要的列是否存在
@@ -1369,15 +1406,19 @@ class AKShareAdapter:
             # 获取日期列
             date_columns = [col for col in df_abstract.columns if col not in ['选项', '指标']]
             if not date_columns:
+                self.logger.debug("财务摘要数据中没有日期列")
                 return None
             
             # 提取资产负债表相关指标
             for _, row in df_abstract.iterrows():
                 try:
                     indicator = row.get('指标', None)
-                    if indicator and indicator in ['总资产', '负债合计', '股东权益', '流动资产', '流动负债', '货币资金']:
+                    if indicator is None:
+                        continue
+                        
+                    if indicator in ['总资产', '负债合计', '股东权益', '流动资产', '流动负债', '货币资金']:
                         if date_columns:
-                            balance_sheet_data[indicator] = row.get(date_columns[0], None)
+                            balance_sheet_data[indicator] = self._safe_float(row.get(date_columns[0], None))
                         else:
                             balance_sheet_data[indicator] = None
                 except Exception as row_error:
@@ -1386,6 +1427,8 @@ class AKShareAdapter:
             
             if balance_sheet_data:
                 return pd.DataFrame([balance_sheet_data])
+            
+            self.logger.debug("未能从财务摘要中提取到资产负债表数据")
             return None
         except Exception as e:
             self.logger.error(f"从财务摘要提取资产负债表数据失败: {e}")
@@ -1395,6 +1438,7 @@ class AKShareAdapter:
         """从财务摘要中提取利润表相关数据"""
         try:
             if df_abstract is None or df_abstract.empty:
+                self.logger.debug("财务摘要数据为空，无法提取利润表数据")
                 return None
             
             # 检查必要的列是否存在
@@ -1408,30 +1452,36 @@ class AKShareAdapter:
             # 获取日期列
             date_columns = [col for col in df_abstract.columns if col not in ['选项', '指标']]
             if not date_columns:
+                self.logger.debug("财务摘要数据中没有日期列")
                 return None
             
             # 提取利润表相关指标
             for _, row in df_abstract.iterrows():
                 try:
                     indicator = row.get('指标', None)
-                    if indicator and indicator in ['营业收入', '归母净利润', '营业利润', '毛利润', '净利润']:
+                    if indicator is None:
+                        continue
+                        
+                    if indicator in ['营业收入', '归母净利润', '营业利润', '毛利润', '净利润']:
                         # 统一映射
                         if indicator == '归母净利润':
                             if date_columns:
-                                income_data['净利润'] = row.get(date_columns[0], None)
+                                income_data['净利润'] = self._safe_float(row.get(date_columns[0], None))
                             else:
                                 income_data['净利润'] = None
                         else:
                             if date_columns:
-                                income_data[indicator] = row.get(date_columns[0], None)
+                                income_data[indicator] = self._safe_float(row.get(date_columns[0], None))
                             else:
                                 income_data[indicator] = None
                 except Exception as row_error:
-                    self.logger.warning(f"处理行数据时出错: {row_error}")
+                    self.logger.warning(f"处理利润表行数据时出错: {row_error}")
                     continue
             
             if income_data:
                 return pd.DataFrame([income_data])
+            
+            self.logger.debug("未能从财务摘要中提取到利润表数据")
             return None
         except Exception as e:
             self.logger.error(f"从财务摘要提取利润表数据失败: {e}")
@@ -1441,6 +1491,7 @@ class AKShareAdapter:
         """从财务摘要中提取现金流量表相关数据"""
         try:
             if df_abstract is None or df_abstract.empty:
+                self.logger.debug("财务摘要数据为空，无法提取现金流量表数据")
                 return None
             
             # 检查必要的列是否存在
@@ -1454,35 +1505,41 @@ class AKShareAdapter:
             # 获取日期列
             date_columns = [col for col in df_abstract.columns if col not in ['选项', '指标']]
             if not date_columns:
+                self.logger.debug("财务摘要数据中没有日期列")
                 return None
             
             # 提取现金流量表相关指标
             for _, row in df_abstract.iterrows():
                 try:
                     indicator = row.get('指标', None)
-                    if indicator and indicator in ['经营现金流量净额', '投资现金流量净额', '筹资现金流量净额']:
+                    if indicator is None:
+                        continue
+                        
+                    if indicator in ['经营现金流量净额', '投资现金流量净额', '筹资现金流量净额']:
                         # 映射到标准名称
                         if indicator == '经营现金流量净额':
                             if date_columns:
-                                cash_flow_data['经营活动产生的现金流量净额'] = row.get(date_columns[0], None)
+                                cash_flow_data['经营活动产生的现金流量净额'] = self._safe_float(row.get(date_columns[0], None))
                             else:
                                 cash_flow_data['经营活动产生的现金流量净额'] = None
                         elif indicator == '投资现金流量净额':
                             if date_columns:
-                                cash_flow_data['投资活动产生的现金流量净额'] = row.get(date_columns[0], None)
+                                cash_flow_data['投资活动产生的现金流量净额'] = self._safe_float(row.get(date_columns[0], None))
                             else:
                                 cash_flow_data['投资活动产生的现金流量净额'] = None
                         elif indicator == '筹资现金流量净额':
                             if date_columns:
-                                cash_flow_data['筹资活动产生的现金流量净额'] = row.get(date_columns[0], None)
+                                cash_flow_data['筹资活动产生的现金流量净额'] = self._safe_float(row.get(date_columns[0], None))
                             else:
                                 cash_flow_data['筹资活动产生的现金流量净额'] = None
                 except Exception as row_error:
-                    self.logger.warning(f"处理行数据时出错: {row_error}")
+                    self.logger.warning(f"处理现金流量表行数据时出错: {row_error}")
                     continue
             
             if cash_flow_data:
                 return pd.DataFrame([cash_flow_data])
+            
+            self.logger.debug("未能从财务摘要中提取到现金流量表数据")
             return None
         except Exception as e:
             self.logger.error(f"从财务摘要提取现金流量表数据失败: {e}")
@@ -1614,11 +1671,18 @@ class AKShareAdapter:
         try:
             df_abstract = self._safe_get_data(ak.stock_financial_abstract, symbol=stock_code)
             if df_abstract is None or df_abstract.empty:
+                self.logger.warning(f"获取财务摘要数据失败: {stock_code} - 返回空数据")
+                return {}
+            
+            # 检查必要的列是否存在
+            if '指标' not in df_abstract.columns:
+                self.logger.warning(f"财务摘要数据缺少'指标'列: {stock_code}")
                 return {}
             
             # 获取多期数据
             date_columns = [col for col in df_abstract.columns if col not in ['选项', '指标']]
             if not date_columns:
+                self.logger.warning(f"财务摘要数据没有日期列: {stock_code}")
                 return {}
             
             # 限制获取的期数
@@ -1630,46 +1694,62 @@ class AKShareAdapter:
                 
                 # 提取所有指标
                 for _, row in df_abstract.iterrows():
-                    indicator = row['指标']
-                    value = self._safe_float(row.get(date_col, None))
-                    if value is not None:
-                        # 标准化指标名称
-                        standardized_name = self._standardize_indicator_name(indicator)
-                        period_data[standardized_name] = value
+                    try:
+                        indicator = row['指标']
+                        value = self._safe_float(row.get(date_col, None))
+                        if value is not None:
+                            # 标准化指标名称
+                            standardized_name = self._standardize_indicator_name(indicator)
+                            period_data[standardized_name] = value
+                    except (KeyError, TypeError) as e:
+                        # 跳过有问题的行
+                        self.logger.debug(f"处理财务摘要行时出错: {e}")
+                        continue
                 
                 enhanced_data.append(period_data)
             
             return {'periods': enhanced_data, 'total_periods': len(enhanced_data)}
         except Exception as e:
-            self.logger.error(f"获取增强财务摘要失败: {e}")
+            self.logger.error(f"获取增强财务摘要失败: {stock_code} - {e}")
             return {}
     
     def _standardize_indicator_name(self, indicator: str) -> str:
         """标准化指标名称"""
-        mapping = {
-            '营业收入': 'revenue',
-            '归母净利润': 'net_income',
-            '净利润': 'net_income',
-            '总资产': 'total_assets',
-            '负债合计': 'total_liabilities',
-            '股东权益': 'shareholders_equity',
-            '流动资产': 'current_assets',
-            '流动负债': 'current_liabilities',
-            '货币资金': 'cash_and_cash_equivalents',
-            '营业利润': 'operating_income',
-            '毛利润': 'gross_profit',
-            '经营现金流量净额': 'operating_cash_flow',
-            '投资现金流量净额': 'investing_cash_flow',
-            '筹资现金流量净额': 'financing_cash_flow',
-            '每股收益': 'earnings_per_share',
-            '每股净资产': 'book_value_per_share',
-            '净资产收益率': 'return_on_equity',
-            '总资产收益率': 'return_on_assets',
-            '资产负债率': 'debt_to_assets',
-            '流动比率': 'current_ratio',
-            '速动比率': 'quick_ratio'
-        }
-        return mapping.get(indicator, indicator.lower().replace(' ', '_'))
+        try:
+            if indicator is None:
+                return "unknown_indicator"
+                
+            if not isinstance(indicator, str):
+                # 尝试转换为字符串
+                indicator = str(indicator)
+                
+            mapping = {
+                '营业收入': 'revenue',
+                '归母净利润': 'net_income',
+                '净利润': 'net_income',
+                '总资产': 'total_assets',
+                '负债合计': 'total_liabilities',
+                '股东权益': 'shareholders_equity',
+                '流动资产': 'current_assets',
+                '流动负债': 'current_liabilities',
+                '货币资金': 'cash_and_cash_equivalents',
+                '营业利润': 'operating_income',
+                '毛利润': 'gross_profit',
+                '经营现金流量净额': 'operating_cash_flow',
+                '投资现金流量净额': 'investing_cash_flow',
+                '筹资现金流量净额': 'financing_cash_flow',
+                '每股收益': 'earnings_per_share',
+                '每股净资产': 'book_value_per_share',
+                '净资产收益率': 'return_on_equity',
+                '总资产收益率': 'return_on_assets',
+                '资产负债率': 'debt_to_assets',
+                '流动比率': 'current_ratio',
+                '速动比率': 'quick_ratio'
+            }
+            return mapping.get(indicator, indicator.lower().replace(' ', '_'))
+        except Exception as e:
+            self.logger.debug(f"标准化指标名称失败: {e}")
+            return "unknown_indicator"
     
     def _extract_growth_metrics(self, historical_data: pd.DataFrame) -> Dict[str, Any]:
         """从历史财务数据中提取增长率指标"""
@@ -2028,38 +2108,37 @@ class AKShareAdapter:
             except Exception as e:
                 self.logger.warning(f"获取CNINFO行业PE数据失败: {e}")
             
-            # 备份数据源1: AKShare官方A股个股市盈率、市净率和股息率指标
+            # 备份数据源1: 使用东方财富个股信息获取PE/PB数据
             if 'pe_ratio' not in valuation_data:  # 只有在主要数据源失败时才使用备份
                 try:
-                    df = self._safe_get_data(ak.stock_a_indicator_lg, symbol=stock_code)
+                    df = self._safe_get_data(ak.stock_individual_info_em, symbol=stock_code)
                     if df is not None and not df.empty:
                         # 获取最新数据
-                        latest_data = df.iloc[-1] if len(df) > 0 else None
+                        latest_data = df.iloc[0] if len(df) > 0 else None
                         if latest_data is not None:
-                            pe_ratio = self._safe_float(latest_data.get('市盈率'))
+                            pe_ratio = self._safe_float(latest_data.get('市盈率-动态'))
                             pb_ratio = self._safe_float(latest_data.get('市净率'))
                             dividend_yield = self._safe_float(latest_data.get('股息率'))
                             
                             # 验证PE/PB数据的合理性
                             if pe_ratio is not None and 0 < pe_ratio <= 1000:
                                 valuation_data['pe_ratio'] = pe_ratio
-                                valuation_data['pe_ratio_source'] = 'akshare_official_backup'
-                                self.logger.info(f"获取到官方PE备份数据: {pe_ratio}")
+                                valuation_data['pe_ratio_source'] = 'em_individual_info'
+                                self.logger.info(f"获取到东方财富PE备份数据: {pe_ratio}")
                             
                             if pb_ratio is not None and 0 < pb_ratio <= 100:
                                 valuation_data['pb_ratio'] = pb_ratio
-                                valuation_data['pb_ratio_source'] = 'akshare_official_backup'
-                                self.logger.info(f"获取到官方PB备份数据: {pb_ratio}")
+                                valuation_data['pb_ratio_source'] = 'em_individual_info'
+                                self.logger.info(f"获取到东方财富PB备份数据: {pb_ratio}")
                             
                             if dividend_yield is not None:
                                 valuation_data['dividend_yield'] = dividend_yield
                                 
                             # 添加数据日期
-                            if '日期' in latest_data:
-                                valuation_data['valuation_date'] = latest_data.get('日期')
+                            valuation_data['valuation_date'] = pd.Timestamp.now().strftime('%Y-%m-%d')
                                 
                 except Exception as e:
-                    self.logger.warning(f"获取AKShare官方PE/PB数据失败: {e}")
+                    self.logger.warning(f"获取东方财富个股PE/PB数据失败: {e}")
             
             # 补充数据源2: 全部A股等权重市盈率、中位数市盈率
             try:

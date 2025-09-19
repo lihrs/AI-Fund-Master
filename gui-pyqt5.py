@@ -2079,7 +2079,7 @@ def create_analysts_tab():
 def create_config_tab():
     """创建配置标签页"""
     tab = QWidget()
-    g_widgets['tab_widget'].addTab(tab, "⚙️ 配置")
+    g_widgets['tab_widget'].addTab(tab, "配置")
     
     layout = QVBoxLayout(tab)
     layout.setContentsMargins(15, 15, 15, 15)
@@ -2200,7 +2200,7 @@ def create_config_tab():
 def create_run_tab():
     """创建运行标签页"""
     tab = QWidget()
-    g_widgets['tab_widget'].addTab(tab, "▶️ 运行")
+    g_widgets['tab_widget'].addTab(tab, "▶ 运行")
     
     layout = QVBoxLayout(tab)
     layout.setContentsMargins(15, 15, 15, 15)

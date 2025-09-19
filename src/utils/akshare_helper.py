@@ -152,7 +152,12 @@ class AKShareHelper:
     
     def get_financial_abstract(self, symbol: str):
         """获取财务摘要"""
-        return self.safe_call(ak.stock_financial_abstract, symbol=symbol)
+        result = self.safe_call(ak.stock_financial_abstract, symbol=symbol)
+        # 检查结果是否为None，避免'NoneType' object is not subscriptable错误
+        if result is None:
+            logger.warning(f"获取财务摘要失败: {symbol} - 返回None")
+            return None
+        return result
     
     def get_stock_history(self, symbol: str, period: str = "daily", 
                          start_date: str = None, end_date: str = None, 

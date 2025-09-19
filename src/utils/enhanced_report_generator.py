@@ -89,7 +89,7 @@ class EnhancedReportGenerator:
             .signal-badge {
                 padding: 5px 15px;
                 border-radius: 20px;
-                color: white;
+                color: #000000;
                 font-weight: bold;
                 font-size: 0.9em;
             }
@@ -156,13 +156,13 @@ class EnhancedReportGenerator:
             .score-poor { background-color: #e74c3c; }
             .market-overview {
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                color: white;
+                color: #000000;
                 padding: 25px;
                 border-radius: 8px;
                 margin-bottom: 30px;
             }
             .market-overview h2 {
-                color: white;
+                color: #000000;
                 border-bottom: 2px solid rgba(255,255,255,0.3);
             }
             .overview-stats {
@@ -188,13 +188,13 @@ class EnhancedReportGenerator:
             }
             .prediction-section {
                 background: linear-gradient(135deg, #74b9ff 0%, #0984e3 100%);
-                color: white;
+                color: #000000;
                 padding: 20px;
                 border-radius: 8px;
                 margin: 15px 0;
             }
             .prediction-section h4 {
-                color: white;
+                color: #000000;
                 margin-top: 0;
             }
             .trend-indicator {

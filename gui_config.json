@@ -1,7 +1,10 @@
 {
   "ai_config": {
-    "provider": "Ollama",
-    "model": "qwen3:0.6b"
+    "provider": "SiliconFlow",
+    "model": "Qwen/Qwen3-8B",
+    "base_url": "https://api.siliconflow.cn/v1",
+    "api_key": "sk-lvaifunlmkehrjkklahiawnmsliqypstpniyvgdygpfptoqj",
+    "last_updated": "2025-09-19T22:54:20.178541"
   },
   "analysts_config": {
     "selected_analysts": {
@@ -21,14 +24,19 @@
     "total_selected": 3
   },
   "trading_config": {
-    "tickers": "399006",
-    "show_reasoning": true
+    "tickers": "688347",
+    "start_date": "2025-07-15",
+    "end_date": "2025-09-19",
+    "show_reasoning": true,
+    "enable_multithreading": false
   },
   "ui_config": {
     "window_geometry": null
   },
-  "provider": "Ollama",
-  "model": "qwen3:0.6b",
+  "provider": "SiliconFlow",
+  "model": "Qwen/Qwen3-8B",
+  "base_url": "https://api.siliconflow.cn/v1",
+  "api_key": "sk-lvaifunlmkehrjkklahiawnmsliqypstpniyvgdygpfptoqj",
   "selected_analysts": {
     "warren_buffett": true,
     "charlie_munger": true,
@@ -43,8 +51,9 @@
     "rakesh_jhunjhunwala": false,
     "technical_analyst": false
   },
-  "tickers": "399006",
+  "tickers": "688347",
   "show_reasoning": true,
   "config_version": "2.0",
+  "saved_at": "2025-09-19T22:54:20.178903",
   "app_version": "3.1.0"
 }

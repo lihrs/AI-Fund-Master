@@ -859,8 +859,7 @@ class AKShareAdapter:
                 if value < min_val or value > max_val:
                     self.logger.debug(f"发现异常值: {field}={value}, 超出范围[{min_val}, {max_val}]")
                     repair_log.append(f"{message}: {field}={value:.4f}")
-                    del repaired_data[field]
-                    self.logger.debug(f"已从数据中删除异常值: {field}")
+                    # 记录异常值信息
                     repaired_data[f"{field}_flag"] = "异常值"
                     repaired_data[f"{field}_original"] = value
                     # 移除异常值 - 直接删除键而不是设置为None

@@ -303,19 +303,6 @@ class DataQualityFixer:
             if abs(calculated_roa - reported_roa) > 0.05:
                 data['roa'] = calculated_roa
                 logger.info(f"修复ROA: {reported_roa:.3f} -> {calculated_roa:.3f}")
-                rules = self.validation_rules[field]
-                
-                try:
-                    numeric_value = float(value)
-                    if rules['min'] <= numeric_value <= rules['max']:
-                        valid_count += 1
-                    else:
-                        invalid_fields.append(f"{field}: {value} (范围: {rules['min']}-{rules['max']})")
-                except (ValueError, TypeError):
-                    invalid_fields.append(f"{field}: {value} (无法转换为数字)")
-        
-        accuracy_score = valid_count / total_count if total_count > 0 else 1.0
-        return accuracy_score, invalid_fields
     
     def validate_data_consistency(self, data: Dict[str, Any]) -> Tuple[float, List[str]]:
         """验证数据一致性"""

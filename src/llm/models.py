@@ -139,8 +139,8 @@ def get_model(model_name: str, model_provider: ModelProvider) -> ChatOpenAI | Ch
         return ChatOpenAI(model=model_name, api_key=api_key, base_url=base_url)
     elif model_provider == ModelProvider.SILICONFLOW:
         # Get and validate API key
-        api_key = os.getenv("SILICONFLOW_API_KEY")
-        base_url = os.getenv("SILICONFLOW_API_BASE")
+        api_key = os.getenv("api_key")
+        base_url = os.getenv("base_url")
         if not api_key:
             # Print error to console
             print(f"API Key Error: Please make sure SILICONFLOW_API_KEY is set in your .env file or provided via API keys.")

@@ -48,7 +48,7 @@ from datetime import datetime
 from dateutil.relativedelta import relativedelta
 
 # Load environment variables from .env file
-load_dotenv()
+# load_dotenv()
 
 # 全局常量 - 默认模型名称
 DEFAULT_MODEL_NAME = "qwen3:0.6b"
@@ -1766,7 +1766,11 @@ def load_config():
         model = ai_config.get("model") or config.get("model", "")
         base_url = ai_config.get("base_url") or config.get("base_url", "")
         api_key = ai_config.get("api_key") or config.get("api_key", "")
-        
+
+        #将配置写入环境变量
+        os.environ['api_key'] = api_key
+        os.environ['base_url'] = base_url
+
         # 恢复供应商配置（不触发change事件避免重复检查）
         if provider:
             if provider in ["DeepSeek", "Ollama", "OpenAI"]:

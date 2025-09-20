@@ -4,7 +4,7 @@
     "model": "Qwen/Qwen3-8B",
     "base_url": "https://api.siliconflow.cn/v1",
     "api_key": "sk-lvaifunlmkehrjkklahiawnmsliqypstpniyvgdygpfptoqj",
-    "last_updated": "2025-09-19T23:25:42.299352"
+    "last_updated": "2025-09-20T23:12:16.491441"
   },
   "analysts_config": {
     "selected_analysts": {
@@ -33,10 +33,6 @@
   "ui_config": {
     "window_geometry": null
   },
-  "provider": "SiliconFlow",
-  "model": "Qwen/Qwen3-8B",
-  "base_url": "https://api.siliconflow.cn/v1",
-  "api_key": "sk-lvaifunlmkehrjkklahiawnmsliqypstpniyvgdygpfptoqj",
   "selected_analysts": {
     "warren_buffett": true,
     "charlie_munger": true,
@@ -54,6 +50,6 @@
   "tickers": "688347",
   "show_reasoning": true,
   "config_version": "2.0",
-  "saved_at": "2025-09-19T23:25:42.299416",
+  "saved_at": "2025-09-20T23:12:16.491470",
   "app_version": "3.1.0"
 }

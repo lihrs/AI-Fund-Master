@@ -52,6 +52,7 @@ from dateutil.relativedelta import relativedelta
 
 # 全局常量 - 默认模型名称
 DEFAULT_MODEL_NAME = "qwen3:0.6b"
+DEFAULT_PROVIDERS=["DeepSeek", "Ollama", "OpenAI","SiliconFlow"]
 
 # 全局变量存储UI组件和状态
 g_widgets = {}
@@ -1773,7 +1774,8 @@ def load_config():
 
         # 恢复供应商配置（不触发change事件避免重复检查）
         if provider:
-            if provider in ["DeepSeek", "Ollama", "OpenAI"]:
+            if provider in DEFAULT_PROVIDERS:
+
                 # 临时断开信号连接，避免触发on_provider_changed
                 g_widgets['provider_combo'].blockSignals(True)
                 g_widgets['provider_combo'].setCurrentText(provider)
@@ -2097,7 +2099,7 @@ def create_config_tab():
     provider_model_layout.addWidget(QLabel("供应商:"))
     
     g_widgets['provider_combo'] = QComboBox()
-    g_widgets['provider_combo'].addItems(["DeepSeek", "Ollama", "SiliconFlow"])
+    g_widgets['provider_combo'].addItems(DEFAULT_PROVIDERS)
     g_widgets['provider_combo'].setCurrentIndex(0)  # 默认选择DeepSeek
     g_widgets['provider_combo'].currentTextChanged.connect(on_provider_changed)
     provider_model_layout.addWidget(g_widgets['provider_combo'])

@@ -78,6 +78,91 @@
             padding: 1.5rem;
         }
 
+        /* Tab导航 */
+        .tab-navigation {
+            background: var(--card-bg);
+            border-radius: 6px 6px 0 0;
+            padding: 0;
+            border: 1px solid var(--border-color);
+            border-bottom: none;
+            display: flex;
+            margin-bottom: 0;
+        }
+
+        .tab-button {
+            flex: 1;
+            padding: 0.9rem 1.2rem;
+            background: transparent;
+            border: none;
+            border-right: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .tab-button:last-child {
+            border-right: none;
+        }
+
+        .tab-button:hover {
+            background: rgba(37, 99, 235, 0.05);
+            color: var(--primary-color);
+        }
+
+        .tab-button.active {
+            background: var(--card-bg);
+            color: var(--primary-color);
+            font-weight: 600;
+        }
+
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: var(--primary-color);
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* 数据状态提示 */
+        .data-status-notice {
+            padding: 1rem 1.5rem;
+            margin: 1rem 0;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 1rem;
+            font-weight: 500;
+        }
+
+        .data-status-expired {
+            background: #fee;
+            border: 2px solid #f44;
+            color: #c00;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+
+        .data-status-normal {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            font-weight: normal;
+            padding: 0.5rem;
+        }
+
         /* 筛选区域 */
         .filter-section {
             background: var(--card-bg);
@@ -476,6 +561,104 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* 股票列表 */
+        .stock-list-container {
+            background: var(--card-bg);
+            border-radius: 0 0 6px 6px;
+            padding: 1.5rem;
+            border: 1px solid var(--border-color);
+            border-top: none;
+            min-height: 400px;
+        }
+
+        .stock-progress-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 400px;
+            gap: 1.5rem;
+        }
+
+        .stock-progress-bar {
+            width: 100%;
+            max-width: 600px;
+            height: 30px;
+            background: var(--border-color);
+            border-radius: 15px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .stock-progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary-color), #3b82f6);
+            transition: width 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .stock-progress-text {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
+        .stock-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        .stock-table th,
+        .stock-table td {
+            padding: 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stock-table th {
+            background: var(--bg-color);
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.85rem;
+        }
+
+        .stock-table tbody tr:hover {
+            background: rgba(37, 99, 235, 0.03);
+        }
+
+        .stock-code {
+            font-family: 'Consolas', 'Monaco', monospace;
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+
+        .fund-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.3rem;
+        }
+
+        .fund-tag {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary-color);
+            border-radius: 3px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .fund-tag:hover {
+            background: rgba(37, 99, 235, 0.2);
+        }
+
         /* 浮动返回首页按钮 */
         .float-back-btn {
             position: fixed;
@@ -637,18 +820,43 @@
 <body>
     <nav class="navbar">
         <div class="navbar-left">
-            <h1>AI 基金大师 v4.0 - 智能基金分析系统</h1>
+            <h1>AI 基金大师 v4.1.0 <span id="versionType"></span></h1>
             <p>为普通投资者提供专业的基金分析服务</p>
         </div>
         <div class="navbar-right">
-            <span>作者：</span>
-            <a href="mailto:267278466@qq.com">267278466@qq.com</a>
+            <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;">
+                <div>
+                    <a href="https://github.com/hengruiyun/AI-Stock-Master" target="_blank" rel="noopener noreferrer" 
+                       style="color: white; text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 0.3rem;">
+                        AI股票大师
+                    </a>
+                </div>
+                <div style="font-size: 0.8rem;">
+                    <span>作者：</span>
+                    <a href="mailto:267278466@qq.com">267278466@qq.com</a>
+                </div>
+            </div>
         </div>
     </nav>
 
     <div class="container">
-        <!-- 筛选区域 -->
-        <div class="filter-section">
+        <!-- Tab导航 -->
+        <div class="tab-navigation">
+            <button class="tab-button active" onclick="switchTab('fund')">
+                基金列表
+            </button>
+            <button class="tab-button" onclick="switchTab('stock')">
+                股票列表
+            </button>
+        </div>
+
+        <!-- 基金列表Tab -->
+        <div id="fundTab" class="tab-content active">
+            <!-- 🔥 数据状态提示 -->
+            <div id="dataStatusNotice" class="data-status-notice" style="display: none;"></div>
+            
+            <!-- 筛选区域 -->
+            <div class="filter-section">
             <h3 class="filter-title">🔍 基金筛选</h3>
             
             <div class="filter-grid">
@@ -755,6 +963,52 @@
             <!-- 分页 -->
             <div class="pagination" id="pagination"></div>
         </div>
+        </div>
+        <!-- 基金列表Tab结束 -->
+
+        <!-- 股票列表Tab -->
+        <div id="stockTab" class="tab-content">
+            <div class="stock-list-container">
+                <!-- 统计进度显示 -->
+                <div id="stockProgressContainer" class="stock-progress-container">
+                    <h3 style="color: var(--text-primary); margin: 0;">正在统计十大成分股...</h3>
+                    <div class="stock-progress-bar">
+                        <div id="stockProgressFill" class="stock-progress-fill" style="width: 0%;">0%</div>
+                    </div>
+                    <p id="stockProgressText" class="stock-progress-text">准备开始统计...</p>
+                </div>
+
+                <!-- 股票统计结果 -->
+                <div id="stockResultContainer" style="display: none;">
+                    <div class="section-header" style="margin-bottom: 1rem;">
+                        <div>
+                            <h3 class="section-title">📊 十大成分股统计</h3>
+                            <p class="fund-count" id="stockCount">共 0 只股票</p>
+                        </div>
+                    </div>
+
+                    <table class="stock-table">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>股票代码</th>
+                                <th>股票名称</th>
+                                <th>基金个数</th>
+                                <th>基金列表</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stockTableBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                                    暂无数据
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- 股票列表Tab结束 -->
 
         <!-- 浮动返回首页按钮 -->
         <button class="float-back-btn" id="floatBackBtn" onclick="backToHome()" title="返回首页">
@@ -875,6 +1129,139 @@
         let currentFunds = [];
         let allFunds = [];  // 存储所有基金数据
         let currentPage = 1;
+        let stockData = [];  // 股票统计数据
+
+        // Tab切换功能
+        function switchTab(tabName) {
+            // 更新tab按钮状态
+            const tabButtons = document.querySelectorAll('.tab-button');
+            tabButtons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // 切换tab内容
+            document.getElementById('fundTab').classList.remove('active');
+            document.getElementById('stockTab').classList.remove('active');
+
+            if (tabName === 'fund') {
+                document.getElementById('fundTab').classList.add('active');
+            } else if (tabName === 'stock') {
+                document.getElementById('stockTab').classList.add('active');
+                // 切换到股票列表时，开始统计
+                startStockStatistics();
+            }
+        }
+
+        // 开始股票统计
+        async function startStockStatistics() {
+            // 显示进度条，隐藏结果
+            document.getElementById('stockProgressContainer').style.display = 'flex';
+            document.getElementById('stockResultContainer').style.display = 'none';
+
+            // 重置进度
+            updateProgress(0, '准备统计数据...');
+
+            try {
+                // 获取当前筛选的基金列表
+                const funds = currentFunds.length > 0 ? currentFunds : allFunds;
+                
+                if (funds.length === 0) {
+                    updateProgress(100, '没有基金数据可统计');
+                    return;
+                }
+
+                updateProgress(10, `正在统计 ${funds.length} 只基金的持仓...`);
+
+                // 调用后端API进行统计
+                const fundCodes = funds.map(f => f.ts_code);
+                
+                const response = await fetch('/api/stock_statistics', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ fund_codes: fundCodes })
+                });
+
+                if (!response.ok) {
+                    throw new Error('统计失败');
+                }
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    stockData = result.data;
+                    updateProgress(100, `统计完成，共 ${stockData.length} 只股票`);
+                    
+                    // 延迟显示结果
+                    setTimeout(() => {
+                        displayStockResults();
+                    }, 500);
+                } else {
+                    throw new Error(result.message || '统计失败');
+                }
+
+            } catch (error) {
+                console.error('股票统计错误:', error);
+                updateProgress(100, '统计失败: ' + error.message);
+            }
+        }
+
+        // 更新进度条
+        function updateProgress(percent, text) {
+            const fill = document.getElementById('stockProgressFill');
+            const textEl = document.getElementById('stockProgressText');
+            
+            fill.style.width = percent + '%';
+            fill.textContent = percent + '%';
+            textEl.textContent = text;
+        }
+
+        // 显示股票统计结果
+        function displayStockResults() {
+            // 隐藏进度条，显示结果
+            document.getElementById('stockProgressContainer').style.display = 'none';
+            document.getElementById('stockResultContainer').style.display = 'block';
+
+            // 更新统计数量
+            document.getElementById('stockCount').textContent = `共 ${stockData.length} 只股票`;
+
+            // 填充表格
+            const tbody = document.getElementById('stockTableBody');
+            
+            if (stockData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 2rem; color: var(--text-secondary);">
+                            暂无数据
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            tbody.innerHTML = stockData.map((stock, index) => `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td><span class="stock-code">${stock.stock_code}</span></td>
+                    <td>${stock.stock_name || '未知'}</td>
+                    <td><strong>${stock.fund_count}</strong></td>
+                    <td>
+                        <div class="fund-tags">
+                            ${stock.funds.slice(0, 10).map(fund => 
+                                `<span class="fund-tag" onclick="showDetail('${fund.fund_code}')" title="${fund.fund_name}">
+                                    ${fund.fund_code}
+                                </span>`
+                            ).join('')}
+                            ${stock.funds.length > 10 ? 
+                                `<span class="fund-tag" style="background: var(--text-secondary); color: white;">
+                                    +${stock.funds.length - 10}
+                                </span>` : ''
+                            }
+                        </div>
+                    </td>
+                </tr>
+            `).join('');
+        }
         window.__currentFundReport = null;  // 全局缓存当前基金报告（挂载到 window，避免作用域问题）
         const pageSize = 50;
         let sortColumn = null;
@@ -2796,7 +3183,7 @@
                     <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                         <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
                     </svg>
-                    GitHub 开源项目
+                    GitHub 开源项目, AGPL-3.0 license
                 </a>
             </div>
 
@@ -2808,6 +3195,64 @@
     </footer>
 
     <script>
+        // 🔥 加载版本类型和数据状态信息
+        (function loadVersionAndDataStatus() {
+            fetch('/api/version')
+                .then(response => response.json())
+                .then(result => {
+                    if (result.success) {
+                        // 更新版本类型
+                        if (result.data.version_type) {
+                            const versionTypeSpan = document.getElementById('versionType');
+                            if (versionTypeSpan) {
+                                // 组合版本类型和数据日期
+                                let displayText = `[${result.data.version_type}]`;
+                                
+                                // 如果有数据状态信息且未过期，添加数据日期
+                                if (result.data.data_status && result.data.data_status.score_date && !result.data.data_status.is_expired) {
+                                    displayText += ` 数据日期：${result.data.data_status.score_date}`;
+                                }
+                                
+                                versionTypeSpan.textContent = displayText;
+                                versionTypeSpan.style.fontSize = '0.85em';
+                                versionTypeSpan.style.marginLeft = '0.5rem';
+                                versionTypeSpan.style.opacity = '0.9';
+                            }
+                        }
+                        
+                        // 🔥 更新数据状态提示
+                        if (result.data.data_status) {
+                            const dataStatus = result.data.data_status;
+                            const noticeDiv = document.getElementById('dataStatusNotice');
+                            
+                            if (noticeDiv && dataStatus.score_date) {
+                                if (dataStatus.is_expired) {
+                                    // 数据已过期 - 显示红色大字警告（带GitHub链接）
+                                    noticeDiv.className = 'data-status-notice data-status-expired';
+                                    noticeDiv.innerHTML = `
+                                        ⚠️ 此数据已经过期 (数据日期：${dataStatus.score_date}，已过期 ${dataStatus.days_old} 天)
+                                        <br>
+                                        <a href="https://github.com/hengruiyun/AI-Fund-Master" target="_blank" rel="noopener noreferrer" 
+                                           style="color: #c00; text-decoration: underline; font-weight: bold; margin-top: 0.5rem; display: inline-block;">
+                                            点击访问GitHub获取最新版本
+                                        </a>
+                                    `;
+                                    noticeDiv.style.display = 'block';
+                                    console.warn(`[WARN] 数据已过期：${dataStatus.days_old} 天`);
+                                } else {
+                                    // 数据正常 - 不显示提示（日期信息已在版本类型后面显示）
+                                    noticeDiv.style.display = 'none';
+                                    console.log(`[INFO] 数据正常：${dataStatus.score_date} (${dataStatus.days_old} 天前)`);
+                                }
+                            }
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.log('获取版本信息失败:', error.message);
+                });
+        })();
+
         // 页面加载完成后自动检查更新
         (function checkForUpdates() {
             // 延迟 2 秒后检查更新，避免影响页面加载
@@ -2823,10 +3268,44 @@
                         const message = `发现新版本 v${data.latest_version}！\n\n` +
                                       `当前版本：v${data.current_version}\n` +
                                       `最新版本：v${data.latest_version}\n\n` +
-                                      `是否前往下载页面？`;
+                                      `是否立即下载并安装更新？`;
                         
                         if (confirm(message)) {
-                            window.open(data.download_url, '_blank');
+                            // 🔥 调用后台自动升级API
+                            console.log('开始自动升级...');
+                            
+                            try {
+                                const updateResponse = await fetch('/api/perform_update', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' }
+                                });
+                                
+                                const updateResult = await updateResponse.json();
+                                
+                                if (updateResult.success) {
+                                    if (updateResult.action === 'exit') {
+                                        alert('升级程序已启动！\n当前程序即将退出，请等待升级完成。');
+                                        // Windows: 程序将自动退出
+                                    } else if (updateResult.action === 'restart') {
+                                        alert('升级完成！\n请关闭当前窗口并重新启动软件。');
+                                    } else {
+                                        alert(updateResult.message);
+                                    }
+                                } else {
+                                    // 升级失败，提供手动下载选项
+                                    const fallback = confirm(updateResult.message + '\n\n是否前往下载页面手动下载？');
+                                    if (fallback) {
+                                        window.open(data.download_url, '_blank');
+                                    }
+                                }
+                            } catch (updateError) {
+                                console.error('自动升级失败:', updateError);
+                                // 升级失败，提供手动下载选项
+                                const fallback = confirm('自动升级失败！\n\n是否前往下载页面手动下载？');
+                                if (fallback) {
+                                    window.open(data.download_url, '_blank');
+                                }
+                            }
                         }
                         
                         console.log('✓ 发现新版本:', data);

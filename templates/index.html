@@ -1,0 +1,2873 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI基金大师</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #10b981;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-color);
+            color: var(--text-primary);
+            line-height: 1.4;
+            font-size: 13px;  /* 基础字号缩小1号 */
+        }
+
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 0.8rem 1.2rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .navbar-left h1 {
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .navbar-left p {
+            opacity: 0.9;
+            margin-top: 0.2rem;
+            font-size: 0.75rem;
+        }
+
+        .navbar-right {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.8rem;
+            opacity: 0.9;
+        }
+
+        .navbar-right a {
+            color: white;
+            text-decoration: none;
+            transition: opacity 0.2s;
+        }
+
+        .navbar-right a:hover {
+            opacity: 0.8;
+            text-decoration: underline;
+        }
+
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        /* 筛选区域 */
+        .filter-section {
+            background: var(--card-bg);
+            border-radius: 6px;
+            padding: 1rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .filter-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .filter-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 0.8rem;
+            margin-bottom: 0.8rem;
+        }
+
+        .filter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 0.3rem;
+        }
+
+        .filter-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+        }
+
+        .filter-select, .filter-input {
+            padding: 0.4rem 0.6rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            background: white;
+        }
+
+        .filter-select:focus, .filter-input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .filter-buttons {
+            display: flex;
+            gap: 0.8rem;
+            justify-content: flex-end;
+        }
+
+        .btn {
+            padding: 0.5rem 1.2rem;
+            border: none;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #1d4ed8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--text-secondary);
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #475569;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* 基金列表 */
+        .fund-list-section {
+            background: var(--card-bg);
+            border-radius: 6px;
+            padding: 1rem;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            display: none;
+        }
+
+        .fund-list-section.show {
+            display: block;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.8rem;
+        }
+
+        .section-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .fund-count {
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            margin-top: 0.2rem;
+        }
+
+        .table-container {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.75rem;
+        }
+
+        th, td {
+            padding: 0.5rem 0.4rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        th {
+            background: var(--bg-color);
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.7rem;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            white-space: nowrap;
+        }
+
+        th:hover {
+            background: #e2e8f0;
+        }
+
+        th.sortable::after {
+            content: ' ⇅';
+            opacity: 0.3;
+        }
+
+        th.sort-asc::after {
+            content: ' ↑';
+            opacity: 1;
+        }
+
+        th.sort-desc::after {
+            content: ' ↓';
+            opacity: 1;
+        }
+
+        tbody tr {
+            transition: background 0.2s;
+        }
+
+        tbody tr:hover {
+            background: var(--bg-color);
+        }
+
+        .fund-code {
+            color: var(--primary-color);
+            font-weight: 600;
+            font-size: 0.75rem;
+        }
+
+        .fund-name {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-size: 0.8rem;
+        }
+
+        .action-btn {
+            padding: 0.4rem 0.8rem;
+            font-size: 0.75rem;
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .action-btn:hover {
+            background: #1d4ed8;
+        }
+
+        .action-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .loading-cell {
+            color: var(--text-secondary);
+        }
+
+        /* 分页 */
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            font-size: 0.8rem;
+        }
+
+        .page-btn {
+            padding: 0.4rem 0.8rem;
+            border: 1px solid var(--border-color);
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .page-btn:hover:not(:disabled) {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .page-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        .page-btn.active {
+            background: var(--primary-color);
+            color: white;
+            border-color: var(--primary-color);
+        }
+
+        .page-info {
+            color: var(--text-secondary);
+        }
+
+        /* 基金详情 */
+        .detail-section {
+            background: var(--card-bg);
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            display: none;
+        }
+
+        .detail-section.show {
+            display: block;
+        }
+
+        .back-btn {
+            margin-bottom: 0.8rem;
+        }
+
+        .detail-header {
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 1.5rem;
+        }
+
+        .detail-title h2 {
+            font-size: 1.3rem;
+            margin-bottom: 0.4rem;
+        }
+
+        .detail-subtitle {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .info-table {
+            width: 100%;
+            margin-bottom: 0;
+            font-size: 0.75rem;
+        }
+
+        .info-table th {
+            text-align: right;
+            padding: 0.4rem 0.8rem 0.4rem 0;
+            width: 100px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+            background: none;
+        }
+
+        .info-table td {
+            font-size: 0.75rem;
+            padding: 0.4rem 0.5rem;
+        }
+
+        .section-divider {
+            margin: 2rem 0 1rem 0;
+            font-size: 1rem;
+            font-weight: 600;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.5rem;
+        }
+
+        .data-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 0.5rem;
+            margin-bottom: 0;
+        }
+
+        .data-card {
+            padding: 0.6rem;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            background: var(--bg-color);
+        }
+
+        .data-card.success {
+            background: #f0fdf4;
+            border-left: 3px solid var(--success-color);
+        }
+
+        .data-card.danger {
+            background: #fef2f2;
+            border-left: 3px solid var(--danger-color);
+        }
+
+        .data-card.warning {
+            background: #fffbeb;
+            border-left: 3px solid var(--warning-color);
+        }
+
+        .data-card.default {
+            background: #f0f9ff;
+            border-left: 3px solid var(--primary-color);
+        }
+
+        .data-label {
+            color: var(--text-secondary);
+            font-size: 0.7rem;
+            margin-bottom: 0.2rem;
+        }
+
+        .data-value {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* 加载动画 */
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 2rem;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid var(--border-color);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 0.8rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* 浮动返回首页按钮 */
+        .float-back-btn {
+            position: fixed;
+            right: 30px;
+            bottom: 30px;
+            width: 56px;
+            height: 56px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+            cursor: pointer;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            transition: all 0.3s ease;
+            z-index: 1000;
+        }
+
+        .float-back-btn:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+            background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+        }
+
+        .float-back-btn.show {
+            display: flex;
+        }
+        
+        /* 图表容器样式 */
+        .chart-container {
+            margin: 1.5rem 0;
+            padding: 1rem;
+            background: var(--card-bg);
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+        
+        .chart-title {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+        
+        .chart-wrapper {
+            position: relative;
+            height: 300px;
+        }
+        
+        .charts-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin: 1.5rem 0;
+        }
+        
+        @media (max-width: 768px) {
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 0.8rem;
+            }
+
+            .filter-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .data-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .table-container {
+                font-size: 0.7rem;
+            }
+
+            th, td {
+                padding: 0.4rem 0.3rem;
+            }
+            
+            .float-back-btn {
+                right: 20px;
+                bottom: 20px;
+                width: 50px;
+                height: 50px;
+                font-size: 1.3rem;
+            }
+        }
+
+        /* 页脚样式 */
+        .footer {
+            background: var(--card-bg);
+            border-top: 2px solid var(--border-color);
+            padding: 2rem 1rem;
+            margin-top: 3rem;
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .footer-warning {
+            background: #fef3c7;
+            border: 1px solid #fbbf24;
+            border-radius: 6px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            color: #92400e;
+            line-height: 1.6;
+        }
+
+        .footer-warning h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+            color: #dc2626;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 2rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--primary-color);
+            text-decoration: none;
+            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+        }
+
+        .footer-links a:hover {
+            color: #1e40af;
+            text-decoration: underline;
+        }
+
+        .footer-copyright {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-left">
+            <h1>AI 基金大师 v4.0 - 智能基金分析系统</h1>
+            <p>为普通投资者提供专业的基金分析服务</p>
+        </div>
+        <div class="navbar-right">
+            <span>作者：</span>
+            <a href="mailto:267278466@qq.com">267278466@qq.com</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <!-- 筛选区域 -->
+        <div class="filter-section">
+            <h3 class="filter-title">🔍 基金筛选</h3>
+            
+            <div class="filter-grid">
+                <div class="filter-item">
+                    <label class="filter-label">基金代码/名称</label>
+                    <input type="text" class="filter-input" id="fundSearch" placeholder="输入代码或名称">
+                </div>
+
+                <div class="filter-item">
+                    <label class="filter-label">基金公司</label>
+                    <select class="filter-select" id="fundCompany">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+
+                <div class="filter-item">
+                    <label class="filter-label">基金类型</label>
+                    <select class="filter-select" id="fundType">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+
+                <div class="filter-item">
+                    <label class="filter-label">投资类型</label>
+                    <select class="filter-select" id="investType">
+                        <option value="">全部</option>
+                    </select>
+                </div>
+
+                <div class="filter-item">
+                    <label class="filter-label">风险等级</label>
+                    <select class="filter-select" id="riskLevel">
+                        <option value="">全部</option>
+                        <option value="low">低风险</option>
+                        <option value="medium">中风险</option>
+                        <option value="high">高风险</option>
+                    </select>
+                </div>
+
+                <div class="filter-item">
+                    <label class="filter-label">基金状态</label>
+                    <select class="filter-select" id="fundStatus">
+                        <option value="L">在售</option>
+                        <option value="">全部</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-buttons">
+                <button class="btn btn-secondary" onclick="resetFilters()">重置</button>
+                <button class="btn btn-primary" onclick="applyFilters()">筛选基金</button>
+            </div>
+        </div>
+
+        <!-- 加载动画 -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>加载中...</p>
+        </div>
+
+        <!-- 基金列表 -->
+        <div class="fund-list-section" id="fundListSection">
+            <div class="section-header">
+                <div>
+                    <h3 class="section-title">📋 基金列表</h3>
+                    <p class="fund-count" id="fundCount">共 0 只基金</p>
+                </div>
+                <div style="display: flex; gap: 0.8rem; align-items: center;">
+                    <button class="btn btn-primary" id="calculateBtn" onclick="calculateAllReturnsBatch()">
+                        计算所有收益
+                    </button>
+                    <span id="cacheStatus" style="font-size: 0.85rem; color: var(--text-secondary);"></span>
+                </div>
+            </div>
+
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>序号</th>
+                            <th class="sortable" data-sort="ts_code">代码</th>
+                            <th class="sortable" data-sort="name">名称</th>
+                            <th class="sortable" data-sort="fund_type">类型</th>
+                            <th class="sortable" data-sort="management">公司</th>
+                            <th class="sortable" data-sort="found_date">成立日期</th>
+                            <th class="sortable" data-sort="return2025">2025年</th>
+                            <th class="sortable" data-sort="return2024">2024年</th>
+                            <th class="sortable" data-sort="return2023">2023年</th>
+                            <th class="sortable" data-sort="score">评分</th>
+                            <th class="sortable" data-sort="rating">评级</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="fundListBody">
+                        <tr>
+                            <td colspan="12" style="text-align: center; padding: 1.5rem; color: var(--text-secondary);">
+                                
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 分页 -->
+            <div class="pagination" id="pagination"></div>
+        </div>
+
+        <!-- 浮动返回首页按钮 -->
+        <button class="float-back-btn" id="floatBackBtn" onclick="backToHome()" title="返回首页">
+            🏠
+        </button>
+
+        <!-- 基金详情 -->
+        <div class="detail-section" id="detailSection">
+            <button class="btn btn-secondary back-btn" onclick="hideDetail()">← 返回列表</button>
+            
+            <div class="detail-header">
+                <div class="detail-title">
+                    <h2 id="fundName">基金名称</h2>
+                    <p class="detail-subtitle">
+                        <span id="detailFundCode">基金代码</span> | 
+                        <span id="detailFundType">基金类型</span> | 
+                        <span id="detailFundCompany">管理公司</span>
+                    </p>
+                </div>
+            </div>
+
+            <!-- 基本信息 -->
+            <div style="background: white; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 0.8rem;">
+                <h3 style="margin: 0 0 0.6rem 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">
+                    📋 基本信息
+                </h3>
+                <table class="info-table">
+                    <tr>
+                        <th>基金代码：</th>
+                        <td id="infoCode">--</td>
+                        <th>基金名称：</th>
+                        <td id="infoName">--</td>
+                    </tr>
+                    <tr>
+                        <th>基金类型：</th>
+                        <td id="infoType">--</td>
+                        <th>管理公司：</th>
+                        <td id="infoCompany">--</td>
+                    </tr>
+                    <tr>
+                        <th>成立日期：</th>
+                        <td id="infoFoundDate">--</td>
+                        <th>上市日期：</th>
+                        <td id="infoListDate">--</td>
+                    </tr>
+                    <tr>
+                        <th>基金状态：</th>
+                        <td id="infoStatus">--</td>
+                        <th>基金规模：</th>
+                        <td id="infoScale">--</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- 投资建议 -->
+            <div style="background: white; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); border-left: 3px solid var(--primary-color); margin-bottom: 0.8rem;">
+                <h3 style="margin: 0 0 0.6rem 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">🎯 投资建议</h3>
+                <div id="investmentAdvice">
+                    <p style="color: var(--text-secondary); font-size: 0.75rem;">正在分析...</p>
+                </div>
+            </div>
+
+            <!-- 收益对比分析 -->
+            <div style="background: white; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 0.8rem;">
+                <h3 style="margin: 0 0 0.6rem 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">📊 收益对比分析</h3>
+                
+                <!-- 图表区域 -->
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <div class="chart-title">📈 历年收益率走势</div>
+                        <div class="chart-wrapper">
+                            <canvas id="returnsChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">💰 年末净值走势</div>
+                        <div class="chart-wrapper">
+                            <canvas id="navChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 文字分析 -->
+                <div id="returnComparison" style="font-size: 0.75rem;">
+                    <p style="color: var(--text-secondary);">加载中...</p>
+                </div>
+            </div>
+
+            <!-- 前十大重仓股 -->
+            <div style="background: white; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 0.8rem;">
+                <h3 style="margin: 0 0 0.6rem 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">💼 前十大重仓股</h3>
+                <div id="holdingsTable">
+                    <p style="color: var(--text-secondary); font-size: 0.75rem;">加载中...</p>
+                </div>
+            </div>
+
+            <!-- 持仓集中度 -->
+            <div style="background: white; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 0.8rem;">
+                <h3 style="margin: 0 0 0.6rem 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">📈 持仓集中度</h3>
+                <div id="holdingInfo" style="font-size: 0.75rem;">--</div>
+            </div>
+
+            <!-- 风险指标 -->
+            <div style="background: white; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 0.8rem;">
+                <h3 style="margin: 0 0 0.6rem 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">⚠️ 风险指标</h3>
+                <table class="info-table" id="riskGrid"></table>
+            </div>
+
+            <!-- 综合评分 -->
+            <div style="background: white; padding: 0.8rem; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 0.8rem;">
+                <h3 style="margin: 0 0 0.6rem 0; font-size: 0.9rem; color: var(--text-primary); font-weight: 600;">⭐ 综合评分</h3>
+                <table class="info-table" id="scoreGrid"></table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentFunds = [];
+        let allFunds = [];  // 存储所有基金数据
+        let currentPage = 1;
+        window.__currentFundReport = null;  // 全局缓存当前基金报告（挂载到 window，避免作用域问题）
+        const pageSize = 50;
+        let sortColumn = null;
+        let sortDirection = 'asc';
+        
+        // 全局配置：是否包含ETF基金（默认不包含）
+        // 全局配置：过滤规则
+        const INCLUDE_ETF = false;  // 是否包含ETF基金
+        const INCLUDE_FOF = false;  // 是否包含FOF基金
+        const INCLUDE_LOF = false;  // 是否包含LOF基金
+        
+        // 当前年份
+        const currentYear = 2025;
+        
+        // 🔥 全局变量：是否使用缓存数据
+        let USE_CACHE = true;  // 默认使用缓存
+        let CACHE_STATUS = null;  // 缓存状态信息
+        let AVAILABLE_YEARS = ['2025', '2024', '2023'];  // 可用年份
+
+        // 显示气泡通知（替代alert）
+        async function showNotification(message, title = '基金分析系统') {
+            try {
+                await fetch('/api/notify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ title, message })
+                });
+            } catch (error) {
+                // 如果通知失败，降级到console
+                console.error('通知失败:', message);
+            }
+        }
+
+        // 页面加载时初始化
+        window.addEventListener('load', async () => {
+            // 🔥 检查缓存状态
+            await checkCacheStatus();
+            
+            await loadFilterOptions();
+            initSortHandlers();
+            // 自动加载所有基金（默认状态为"在售"）
+            await applyFilters();
+        });
+        
+        // 🔥 检查预计算缓存状态
+        async function checkCacheStatus() {
+            try {
+                const response = await fetch('/api/check_cache_status');
+                const data = await response.json();
+                
+                if (data.success && data.data.has_cache) {
+                    CACHE_STATUS = data.data;
+                    USE_CACHE = true;
+                    AVAILABLE_YEARS = data.data.available_years || ['2025', '2024', '2023'];
+                    
+                    console.log('✓ 发现预计算缓存:', CACHE_STATUS.message);
+                    console.log('  可用年份:', AVAILABLE_YEARS.join(', '));
+                    console.log('  基金数量:', CACHE_STATUS.fund_count);
+                    console.log('  总记录数:', CACHE_STATUS.record_count);
+                    
+                    // 🔥 显示缓存状态提示
+                    const statusSpan = document.getElementById('cacheStatus');
+                    if (statusSpan) {
+                        statusSpan.innerHTML = `📦 已加载缓存数据 (${CACHE_STATUS.fund_count}只基金)`;
+                        statusSpan.style.color = '#16a34a';
+                    }
+                } else {
+                    USE_CACHE = false;
+                    AVAILABLE_YEARS = ['2025', '2024', '2023'];
+                    console.log('⚠ 无预计算缓存，将使用实时计算');
+                    console.log('  提示：运行 python precompute_returns.py 生成缓存');
+                    
+                    // 🔥 显示无缓存状态提示
+                    const statusSpan = document.getElementById('cacheStatus');
+                    if (statusSpan) {
+                        statusSpan.innerHTML = `⚠️ 无缓存数据，首次计算较慢`;
+                        statusSpan.style.color = '#f59e0b';
+                    }
+                }
+            } catch (error) {
+                USE_CACHE = false;
+                console.error('检查缓存失败:', error);
+            }
+        }
+
+        // 初始化排序处理
+        function initSortHandlers() {
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.addEventListener('click', () => {
+                    const column = th.dataset.sort;
+                    sortTable(column);
+                });
+            });
+        }
+
+        // 排序表格
+        function sortTable(column) {
+            if (sortColumn === column) {
+                sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = column;
+                sortDirection = 'asc';
+            }
+
+            // 更新表头样式
+            document.querySelectorAll('th.sortable').forEach(th => {
+                th.classList.remove('sort-asc', 'sort-desc');
+            });
+            const currentTh = document.querySelector(`th[data-sort="${column}"]`);
+            currentTh.classList.add(sortDirection === 'asc' ? 'sort-asc' : 'sort-desc');
+
+            // 排序数据
+            allFunds.sort((a, b) => {
+                let valA = a[column];
+                let valB = b[column];
+
+                // 处理数值类型
+                if (column.startsWith('return') || column === 'score') {
+                    valA = parseFloat(valA) || -Infinity;
+                    valB = parseFloat(valB) || -Infinity;
+                }
+                
+                // 🔥 处理评级排序（转换为数字）
+                if (column === 'rating') {
+                    const ratingToNumber = (rating) => {
+                        if (!rating) return -1;
+                        const str = String(rating);
+                        if (str.includes('五星')) return 5;
+                        if (str.includes('四星')) return 4;
+                        if (str.includes('三星')) return 3;
+                        if (str.includes('二星')) return 2;
+                        if (str.includes('一星')) return 1;
+                        return 0;
+                    };
+                    valA = ratingToNumber(valA);
+                    valB = ratingToNumber(valB);
+                }
+
+                if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+                if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+                return 0;
+            });
+
+            // 重新显示当前页
+            displayPage(currentPage);
+        }
+
+        // 加载筛选选项
+        async function loadFilterOptions() {
+            try {
+                const response = await fetch('/api/filter_options');
+                const data = await response.json();
+
+                if (data.success) {
+                    const companySelect = document.getElementById('fundCompany');
+                    data.data.companies.forEach(company => {
+                        const option = document.createElement('option');
+                        option.value = company;
+                        option.textContent = company;
+                        companySelect.appendChild(option);
+                    });
+
+                    const typeSelect = document.getElementById('fundType');
+                    data.data.fund_types.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        typeSelect.appendChild(option);
+                    });
+
+                    const investSelect = document.getElementById('investType');
+                    data.data.invest_types.forEach(type => {
+                        const option = document.createElement('option');
+                        option.value = type;
+                        option.textContent = type;
+                        investSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('加载筛选选项失败:', error);
+            }
+        }
+
+        // 应用筛选
+        async function applyFilters() {
+            const filters = {
+                search: document.getElementById('fundSearch').value.trim(),
+                company: document.getElementById('fundCompany').value,
+                fund_type: document.getElementById('fundType').value,
+                invest_type: document.getElementById('investType').value,
+                risk_level: document.getElementById('riskLevel').value,
+                status: document.getElementById('fundStatus').value
+            };
+
+            showLoading(true);
+            hideFundList();
+            hideDetail();
+
+            try {
+                const params = new URLSearchParams(filters);
+                const response = await fetch(`/api/filter_funds?${params}`);
+                const data = await response.json();
+
+                if (data.success && data.data.length > 0) {
+                    // 过滤ETF、FOF、LOF基金（如果配置为不包含）
+                    let funds = data.data;
+                    const beforeCount = funds.length;
+                    let filteredCount = { ETF: 0, FOF: 0, LOF: 0 };
+                    
+                    if (!INCLUDE_ETF) {
+                        const before = funds.length;
+                        funds = funds.filter(fund => !fund.name.includes('ETF'));
+                        filteredCount.ETF = before - funds.length;
+                    }
+                    
+                    if (!INCLUDE_FOF) {
+                        const before = funds.length;
+                        funds = funds.filter(fund => !fund.name.includes('FOF'));
+                        filteredCount.FOF = before - funds.length;
+                    }
+                    
+                    if (!INCLUDE_LOF) {
+                        const before = funds.length;
+                        funds = funds.filter(fund => !fund.name.includes('LOF'));
+                        filteredCount.LOF = before - funds.length;
+                    }
+                    
+                    // 输出过滤日志
+                    const totalFiltered = filteredCount.ETF + filteredCount.FOF + filteredCount.LOF;
+                    if (totalFiltered > 0) {
+                        let logMsg = `已过滤 ${totalFiltered} 只基金：`;
+                        if (filteredCount.ETF > 0) logMsg += ` ETF(${filteredCount.ETF})`;
+                        if (filteredCount.FOF > 0) logMsg += ` FOF(${filteredCount.FOF})`;
+                        if (filteredCount.LOF > 0) logMsg += ` LOF(${filteredCount.LOF})`;
+                        console.log(logMsg);
+                    }
+                    
+                    if (funds.length === 0) {
+                        showNotification('过滤后未找到符合条件的基金', '筛选结果');
+                        return;
+                    }
+                    
+                    allFunds = funds.map(fund => ({
+                        ...fund,
+                        return2025: null,
+                        return2024: null,
+                        return2023: null,
+                        score: null,
+                        rating: null,
+                        starCount: 0,
+                        isRedStar: false
+                    }));
+                    currentPage = 1;
+                    
+                    // 🔥 一次性加载所有数据后再显示
+                    if (USE_CACHE && CACHE_STATUS) {
+                        console.log('🚀 一次性加载所有数据...');
+                        const statusSpan = document.getElementById('cacheStatus');
+                        if (statusSpan) {
+                            statusSpan.innerHTML = `📊 正在读取数据...`;
+                            statusSpan.style.color = 'var(--primary-color)';
+                        }
+                        
+                        loadAllDataAtOnce()
+                            .then(() => {
+                                console.log('✓ 数据加载完成，显示列表');
+                                displayPage(1);
+                                showFundList();
+                                
+                                if (statusSpan) {
+                                    statusSpan.innerHTML = `✅ 加载完成`;
+                                    statusSpan.style.color = '#16a34a';
+                                }
+                            })
+                            .catch(error => {
+                                console.error('❌ 数据加载失败:', error);
+                                // 即使失败也显示列表
+                                displayPage(1);
+                                showFundList();
+                                
+                                const statusSpan = document.getElementById('cacheStatus');
+                                if (statusSpan) {
+                                    statusSpan.innerHTML = `⚠️ 加载失败`;
+                                    statusSpan.style.color = '#dc2626';
+                                }
+                            });
+                    } else {
+                        // 没有缓存，直接显示
+                        displayPage(1);
+                        showFundList();
+                    }
+                } else {
+                    showNotification('未找到符合条件的基金', '筛选结果');
+                }
+            } catch (error) {
+                showNotification('筛选失败：' + error.message, '错误');
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // 🔥 一次性加载所有数据（评分+收益）
+        async function loadAllDataAtOnce() {
+            const startTime = performance.now();
+            console.log('📊 一次性读取所有数据...');
+            
+            try {
+                const tsCodes = allFunds.map(f => f.ts_code);
+                console.log(`  共 ${tsCodes.length} 只基金`);
+                
+                // 🔥 评分和收益一起从 batch_year_returns 获取
+                console.log('  → 请求收益和评分数据（合并）...');
+                const returnsPromise = fetch('/api/batch_year_returns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ts_codes: tsCodes,
+                        years: AVAILABLE_YEARS,
+                        use_cache: USE_CACHE
+                    })
+                }).then(res => {
+                    console.log(`  ← 响应: ${res.status}`);
+                    if (!res.ok) throw new Error(`API返回${res.status}`);
+                    return res.json();
+                }).catch(err => {
+                    console.error('  ✗ 请求失败:', err);
+                    return { success: false, data: {} };
+                });
+                
+                const returnsData = await returnsPromise;
+                console.log(`  ✓ 数据获取${returnsData.success ? '成功' : '失败'}`);
+                
+                // 🔥 从收益数据中提取评分和收益率
+                allFunds.forEach(fund => {
+                    if (returnsData.success && returnsData.data[fund.ts_code]) {
+                        const fundData = returnsData.data[fund.ts_code];
+                        
+                        // 1. 设置评分（从返回数据中获取，如果有的话）
+                        fund.score = fundData.score || null;
+                        
+                        // 2. 设置收益率
+                        fund.return2025 = fundData['2025'];
+                        fund.return2024 = fundData['2024'];
+                        fund.return2023 = fundData['2023'];
+                    }
+                    
+                    // 3. 根据评分计算星级
+                    if (fund.score !== null && fund.score !== undefined) {
+                        const score = parseFloat(fund.score);
+                        if (score > 80) {
+                            fund.rating = '五星 ★★★★★';
+                            fund.starCount = 5;
+                        } else if (score > 70) {
+                            fund.rating = '四星 ★★★★';
+                            fund.starCount = 4;
+                        } else if (score > 60) {
+                            fund.rating = '三星 ★★★';
+                            fund.starCount = 3;
+                        } else if (score > 50) {
+                            fund.rating = '二星 ★★';
+                            fund.starCount = 2;
+                        } else {
+                            fund.rating = '一星 ★';
+                            fund.starCount = 1;
+                        }
+                    } else {
+                        fund.rating = null;
+                        fund.starCount = 0;
+                    }
+                    
+                    fund.isRedStar = false;
+                });
+                
+                // 检查红星评级
+                const redStarCandidates = allFunds
+                    .filter(f => f.starCount >= 4)
+                    .map(f => ({ ts_code: f.ts_code, rating: f.starCount }));
+                
+                if (redStarCandidates.length > 0) {
+                    try {
+                        const redStarData = await fetch('/api/check_gold_rating', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ funds: redStarCandidates })
+                        }).then(res => res.json());
+                        
+                        if (redStarData.success) {
+                            let redCount = 0;
+                            allFunds.forEach(fund => {
+                                if (redStarData.data[fund.ts_code]) {
+                                    fund.isRedStar = true;
+                                    redCount++;
+                                }
+                            });
+                            console.log(`  ✓ 发现 ${redCount} 只红星基金`);
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ 红星评级检查失败:', error.message);
+                    }
+                }
+                
+                // 排序：先按星级降序，再按红星评级
+                allFunds.sort((a, b) => {
+                    const starDiff = (b.starCount || 0) - (a.starCount || 0);
+                    if (starDiff !== 0) return starDiff;
+                    
+                    const redA = a.isRedStar ? 1 : 0;
+                    const redB = b.isRedStar ? 1 : 0;
+                    return redB - redA;
+                });
+                
+                const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+                console.log(`✓ 全部数据加载完成！耗时: ${duration}秒`);
+                
+            } catch (error) {
+                console.error('❌ 数据加载失败:', error);
+                throw error;
+            }
+        }
+        
+        // 🔥 快速加载评分和星级，然后排序
+        async function loadScoresAndSort() {
+            const startTime = performance.now();
+            console.log('📊 开始快速读取评分...');
+            
+            try {
+                const tsCodes = allFunds.map(f => f.ts_code);
+                const batchSize = 400;
+                const totalBatches = Math.ceil(tsCodes.length / batchSize);
+                console.log(`  请求评分数据: ${tsCodes.length} 只基金，分 ${totalBatches} 批处理`);
+                
+                const mergedScores = {};
+                const redStarCandidates = [];
+                
+                for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+                    const start = batchIndex * batchSize;
+                    const end = Math.min(start + batchSize, tsCodes.length);
+                    const batchCodes = tsCodes.slice(start, end);
+                    const batchFunds = allFunds.slice(start, end);
+                    
+                    console.log(`  ➤ 第 ${batchIndex + 1}/${totalBatches} 批：${batchCodes.length} 只基金`);
+                    
+                    const response = await fetch('/api/batch_scores', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ ts_codes: batchCodes })
+                    }).catch(error => {
+                        console.error(`  ✗ 第 ${batchIndex + 1} 批请求失败（网络错误）`, error);
+                        throw error;
+                    });
+                    
+                    console.log(`    ↳ 响应状态: ${response.status}`);
+                    if (!response.ok) {
+                        const text = await response.text();
+                        throw new Error(`第 ${batchIndex + 1} 批请求失败，HTTP ${response.status}: ${response.statusText} - ${text}`);
+                    }
+                    
+                    const scoresData = await response.json();
+                    if (!scoresData.success) {
+                        throw new Error(`第 ${batchIndex + 1} 批返回失败: ${JSON.stringify(scoresData)}`);
+                    }
+                    
+                    Object.assign(mergedScores, scoresData.data);
+                    
+                    batchFunds.forEach(fund => {
+                        fund.score = scoresData.data[fund.ts_code];
+                        
+                        if (fund.score !== null && fund.score !== undefined) {
+                            const score = parseFloat(fund.score);
+                            if (score > 80) {
+                                fund.rating = '五星 ★★★★★';
+                                fund.starCount = 5;
+                            } else if (score > 70) {
+                                fund.rating = '四星 ★★★★';
+                                fund.starCount = 4;
+                            } else if (score > 60) {
+                                fund.rating = '三星 ★★★';
+                                fund.starCount = 3;
+                            } else if (score > 50) {
+                                fund.rating = '二星 ★★';
+                                fund.starCount = 2;
+                            } else {
+                                fund.rating = '一星 ★';
+                                fund.starCount = 1;
+                            }
+                        } else {
+                            fund.rating = null;
+                            fund.starCount = 0;
+                        }
+                        
+                        fund.isRedStar = false;
+                        if (fund.starCount >= 4) {
+                            redStarCandidates.push({ ts_code: fund.ts_code, rating: fund.starCount });
+                        }
+                    });
+                }
+                
+                const scoreCount = Object.keys(mergedScores).length;
+                const validScores = Object.values(mergedScores).filter(s => s !== null && s !== undefined).length;
+                console.log(`✓ 获取评分: ${scoreCount} 只基金，其中 ${validScores} 只有效评分`);
+                
+                // 检查红星评级
+                if (redStarCandidates.length > 0) {
+                    console.log(`  请求红星评级: ${redStarCandidates.length} 只基金`);
+                    try {
+                        const redStarData = await fetch('/api/check_gold_rating', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ funds: redStarCandidates })
+                        }).then(res => res.json());
+                        
+                        if (redStarData.success) {
+                            let redCount = 0;
+                            allFunds.forEach(fund => {
+                                if (redStarData.data[fund.ts_code]) {
+                                    fund.isRedStar = true;
+                                    redCount++;
+                                }
+                            });
+                            console.log(`✓ 发现 ${redCount} 只红星基金`);
+                        }
+                    } catch (error) {
+                        console.warn('⚠️ 红星评级检查失败', error);
+                    }
+                }
+                
+                // 排序
+                allFunds.sort((a, b) => {
+                    const starDiff = (b.starCount || 0) - (a.starCount || 0);
+                    if (starDiff !== 0) return starDiff;
+                    
+                    const redA = a.isRedStar ? 1 : 0;
+                    const redB = b.isRedStar ? 1 : 0;
+                    return redB - redA;
+                });
+                
+                const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+                console.log(`✓ 评分加载和排序完成！耗时: ${duration}秒`);
+                
+                console.log('排序后的前3个基金:');
+                allFunds.slice(0, 3).forEach((f, i) => {
+                    console.log(`  ${i+1}. ${f.ts_code} - 评分:${f.score} 星级:${f.starCount} 红星:${f.isRedStar}`);
+                });
+            } catch (error) {
+                console.error('快速加载评分失败:', error);
+                throw error;
+            }
+        }
+        
+        // 🔥 加载详细收益数据（后台进行）
+        async function loadDetailedReturns() {
+            const startTime = performance.now();
+            console.log('📦 开始加载详细收益数据...');
+            
+            try {
+                const batchSize = 100;
+                const totalBatches = Math.ceil(allFunds.length / batchSize);
+                
+                for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+                    const start = batchIndex * batchSize;
+                    const end = Math.min(start + batchSize, allFunds.length);
+                    const batchFunds = allFunds.slice(start, end);
+                    const tsCodes = batchFunds.map(f => f.ts_code);
+                    
+                    // 批量获取年度收益
+                    const yearReturnsData = await fetch('/api/batch_year_returns', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ts_codes: tsCodes,
+                            years: AVAILABLE_YEARS,
+                            use_cache: USE_CACHE
+                        })
+                    }).then(res => res.json());
+                    
+                    if (yearReturnsData.success) {
+                        batchFunds.forEach(fund => {
+                            const returns = yearReturnsData.data[fund.ts_code];
+                            if (returns) {
+                                fund.return2025 = returns['2025'];
+                                fund.return2024 = returns['2024'];
+                                fund.return2023 = returns['2023'];
+                            }
+                        });
+                        
+                        // 更新当前页显示
+                        const pageStart = (currentPage - 1) * pageSize;
+                        const pageEnd = pageStart + pageSize;
+                        const currentPageFunds = batchFunds.filter((_, index) => {
+                            const globalIndex = start + index;
+                            return globalIndex >= pageStart && globalIndex < pageEnd;
+                        });
+                        
+                        currentPageFunds.forEach(fund => updateFundRow(fund));
+                    }
+                    
+                    // 更新进度
+                    const progress = Math.round((batchIndex + 1) / totalBatches * 100);
+                    const statusSpan = document.getElementById('cacheStatus');
+                    if (statusSpan) {
+                        statusSpan.innerHTML = `📦 加载中... ${progress}%`;
+                    }
+                }
+                
+                const duration = ((performance.now() - startTime) / 1000).toFixed(2);
+                console.log(`✓ 详细数据加载完成！耗时: ${duration}秒`);
+                
+                const statusSpan = document.getElementById('cacheStatus');
+                if (statusSpan) {
+                    statusSpan.innerHTML = `✅ 全部加载完成`;
+                    statusSpan.style.color = '#16a34a';
+                }
+            } catch (error) {
+                console.error('加载详细数据失败:', error);
+            }
+        }
+
+        // 显示指定页
+        function displayPage(page) {
+            const start = (page - 1) * pageSize;
+            const end = start + pageSize;
+            currentFunds = allFunds.slice(start, end);
+            
+            displayFundList(currentFunds, start);
+            displayPagination(page, Math.ceil(allFunds.length / pageSize));
+            
+            // 不再自动计算收益，等待用户点击"计算所有收益"按钮
+        }
+
+        // 显示基金列表
+        function displayFundList(funds, startIndex) {
+            const tbody = document.getElementById('fundListBody');
+            tbody.innerHTML = '';
+
+            document.getElementById('fundCount').textContent = `共 ${allFunds.length} 只基金`;
+
+            funds.forEach((fund, index) => {
+                const globalIndex = startIndex + index + 1;
+                const safeCode = fund.ts_code.replace(/\./g, '_');
+                
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${globalIndex}</td>
+                    <td class="fund-code">${fund.ts_code}</td>
+                    <td class="fund-name" title="${fund.name}">${fund.name}</td>
+                    <td>${fund.fund_type || '--'}</td>
+                    <td>${fund.management || '--'}</td>
+                    <td>${fund.found_date || '--'}</td>
+                    <td id="return2025_${safeCode}" class="loading-cell">${formatReturn(fund.return2025)}</td>
+                    <td id="return2024_${safeCode}" class="loading-cell">${formatReturn(fund.return2024)}</td>
+                    <td id="return2023_${safeCode}" class="loading-cell">${formatReturn(fund.return2023)}</td>
+                    <td id="score_${safeCode}" class="loading-cell">${formatScore(fund.score)}</td>
+                    <td id="rating_${safeCode}" class="loading-cell">${formatRating(fund.rating, fund.isRedStar)}</td>
+                    <td>
+                        <button class="action-btn" onclick="showFundDetail('${fund.ts_code}')">
+                            详情
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+
+        // 格式化收益率（红涨绿跌）- 修复：未计算时不显示0%
+        function formatReturn(value) {
+            // 严格检查：只有明确的有效数字才显示
+            if (value === null || value === undefined || value === '') {
+                return '--';
+            }
+            
+            // 尝试转换为数字
+            const numValue = parseFloat(value);
+            
+            // 如果转换失败，返回 "--"
+            if (isNaN(numValue)) {
+                return '--';
+            }
+            
+            // 特殊处理：0 也需要显示（真正的0收益）
+            // 但要区分"未计算"和"收益为0"
+            // 红涨绿跌配色
+            let color, text;
+            if (numValue > 0) {
+                color = '#dc2626';  // 红色
+                text = `+${numValue}%`;
+            } else if (numValue < 0) {
+                color = '#16a34a';  // 绿色
+                text = `${numValue}%`;
+            } else {
+                // numValue === 0
+                color = 'var(--text-secondary)';  // 灰色（中性）
+                text = '0%';
+            }
+            
+            return `<span style="color: ${color}; font-weight: 600;">${text}</span>`;
+        }
+
+        // 格式化评分
+        function formatScore(value) {
+            if (value === null || value === undefined || value === '' || isNaN(value)) {
+                return '--';
+            }
+            const numValue = parseFloat(value);
+            if (isNaN(numValue)) return '--';
+            
+            let color = 'var(--text-secondary)';
+            if (numValue >= 80) color = 'var(--success-color)';
+            else if (numValue >= 70) color = 'var(--primary-color)';
+            else if (numValue >= 60) color = 'var(--warning-color)';
+            return `<span style="color: ${color}; font-weight: 600;">${numValue}/100</span>`;
+        }
+        
+        // 🔥 格式化评级（显示星级）
+        function formatRating(value, isRedStar = false) {
+            if (value === null || value === undefined || value === '') {
+                return '--';
+            }
+            
+            // 解析评级（如"五星 ★★★★★"）
+            const ratingText = String(value);
+            
+            // 🔥 红星评级优先（红色）
+            if (isRedStar) {
+                if (ratingText.includes('五星')) {
+                    return '<span style="color: #dc2626; font-weight: 600;">★★★★★</span>';
+                } else if (ratingText.includes('四星')) {
+                    return '<span style="color: #dc2626; font-weight: 600;">★★★★</span>';
+                }
+            }
+            
+            // 🔥 新颜色标准
+            // 根据星级返回颜色和图标
+            if (ratingText.includes('五星')) {
+                // 5星 - 黄色
+                return '<span style="color: #FFD700; font-weight: 600;">★★★★★</span>';
+            } else if (ratingText.includes('四星')) {
+                // 4星 - 蓝色
+                return '<span style="color: #2563eb; font-weight: 600;">★★★★</span>';
+            } else if (ratingText.includes('三星')) {
+                // 3星 - 蓝色
+                return '<span style="color: #2563eb; font-weight: 600;">★★★</span>';
+            } else if (ratingText.includes('二星')) {
+                // 2星 - 绿色
+                return '<span style="color: #16a34a; font-weight: 600;">★★</span>';
+            } else if (ratingText.includes('一星')) {
+                // 1星 - 绿色
+                return '<span style="color: #16a34a; font-weight: 600;">★</span>';
+            }
+            
+            return '--';
+        }
+
+        // 显示分页
+        function displayPagination(currentPage, totalPages) {
+            const pagination = document.getElementById('pagination');
+            pagination.innerHTML = '';
+
+            if (totalPages <= 1) return;
+
+            // 上一页
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'page-btn';
+            prevBtn.textContent = '上一页';
+            prevBtn.disabled = currentPage === 1;
+            prevBtn.onclick = () => changePage(currentPage - 1);
+            pagination.appendChild(prevBtn);
+
+            // 页码按钮
+            const maxButtons = 7;
+            let startPage = Math.max(1, currentPage - Math.floor(maxButtons / 2));
+            let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+            
+            if (endPage - startPage < maxButtons - 1) {
+                startPage = Math.max(1, endPage - maxButtons + 1);
+            }
+
+            if (startPage > 1) {
+                const btn1 = document.createElement('button');
+                btn1.className = 'page-btn';
+                btn1.textContent = '1';
+                btn1.onclick = () => changePage(1);
+                pagination.appendChild(btn1);
+
+                if (startPage > 2) {
+                    const dots = document.createElement('span');
+                    dots.textContent = '...';
+                    dots.style.padding = '0 0.5rem';
+                    pagination.appendChild(dots);
+                }
+            }
+
+            for (let i = startPage; i <= endPage; i++) {
+                const btn = document.createElement('button');
+                btn.className = 'page-btn';
+                if (i === currentPage) btn.classList.add('active');
+                btn.textContent = i;
+                btn.onclick = () => changePage(i);
+                pagination.appendChild(btn);
+            }
+
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    const dots = document.createElement('span');
+                    dots.textContent = '...';
+                    dots.style.padding = '0 0.5rem';
+                    pagination.appendChild(dots);
+                }
+
+                const btnLast = document.createElement('button');
+                btnLast.className = 'page-btn';
+                btnLast.textContent = totalPages;
+                btnLast.onclick = () => changePage(totalPages);
+                pagination.appendChild(btnLast);
+            }
+
+            // 下一页
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'page-btn';
+            nextBtn.textContent = '下一页';
+            nextBtn.disabled = currentPage === totalPages;
+            nextBtn.onclick = () => changePage(currentPage + 1);
+            pagination.appendChild(nextBtn);
+
+            // 页码信息
+            const info = document.createElement('span');
+            info.className = 'page-info';
+            info.textContent = `第 ${currentPage}/${totalPages} 页`;
+            pagination.appendChild(info);
+        }
+
+        // 切换页码
+        function changePage(page) {
+            currentPage = page;
+            displayPage(page);
+        }
+
+        // 计算所有收益
+        async function calculateAllReturns() {
+            if (allFunds.length === 0) {
+                showNotification('请先筛选基金', '提示');
+                return;
+            }
+
+            const btn = document.getElementById('calculateBtn');
+            btn.disabled = true;
+            btn.textContent = '计算中...';
+
+            console.log(`开始计算 ${allFunds.length} 只基金的收益...`);
+
+            for (let i = 0; i < allFunds.length; i++) {
+                const fund = allFunds[i];
+
+                try {
+                    // 并发计算各期收益（提高速度）
+                    const results = await Promise.all([
+                        calculateYearReturn(fund.ts_code, '2025'),
+                        calculateYearReturn(fund.ts_code, '2024'),
+                        calculateYearReturn(fund.ts_code, '2023'),
+                        calculateScore(fund.ts_code)
+                    ]);
+
+                    fund.return2025 = results[0];
+                    fund.return2024 = results[1];
+                    fund.return2023 = results[2];
+                    fund.score = results[3];
+
+                    console.log(`${fund.ts_code}: 2025=${results[0]}%, 2024=${results[1]}%, 2023=${results[2]}%`);
+
+                    // 如果在当前页，更新显示
+                    const pageStart = (currentPage - 1) * pageSize;
+                    const pageEnd = pageStart + pageSize;
+                    if (i >= pageStart && i < pageEnd) {
+                        updateFundRow(fund);
+                    }
+
+                } catch (error) {
+                    console.error(`计算 ${fund.ts_code} 失败:`, error);
+                }
+
+                // 每10个基金更新一次按钮文本
+                if ((i + 1) % 10 === 0 || i === allFunds.length - 1) {
+                    btn.textContent = `计算中... (${i + 1}/${allFunds.length})`;
+                }
+            }
+
+            btn.disabled = false;
+            btn.textContent = '重新计算';
+            console.log('收益计算完成！');
+        }
+
+        // 批量计算所有收益（优化版）
+        async function calculateAllReturnsBatch(isAutoLoad = false) {
+            if (allFunds.length === 0) {
+                showNotification('请先筛选基金', '提示');
+                return;
+            }
+
+            const btn = document.getElementById('calculateBtn');
+            const statusSpan = document.getElementById('cacheStatus');
+            const isManualClick = !isAutoLoad;  // 🔥 通过参数明确判断是否手动点击
+            btn.disabled = true;
+            
+            // 🔥 点击计算按钮时，切换到实时计算
+            if (isManualClick && USE_CACHE && btn.textContent.includes('计算所有收益')) {
+                USE_CACHE = false;
+                btn.textContent = '⚡ 实时计算中...';
+                console.log('🔄 用户手动点击，切换到实时计算模式');
+                if (statusSpan) {
+                    statusSpan.innerHTML = `⚡ 实时计算中... (较慢，约2-3分钟)`;
+                    statusSpan.style.color = '#f59e0b';
+                }
+            } else if (isManualClick) {
+                btn.textContent = '⚡ 实时计算中...';
+                if (statusSpan) {
+                    statusSpan.innerHTML = `⚡ 实时计算中... (较慢，约2-3分钟)`;
+                    statusSpan.style.color = '#f59e0b';
+                }
+            } else if (USE_CACHE) {
+                // 🔥 自动加载缓存时，不改变按钮状态
+                console.log('📦 自动加载预计算缓存数据...');
+            }
+
+            console.log(`${isManualClick ? '手动' : '自动'}批量获取 ${allFunds.length} 只基金的收益...`);
+            console.log(`数据来源: ${USE_CACHE ? '📦 缓存 (快速)' : '⚡ 实时计算 (慢速)'}`);
+            const startTime = performance.now();
+
+            try {
+                // 分批处理（每批100个基金）
+                const batchSize = 100;
+                const totalBatches = Math.ceil(allFunds.length / batchSize);
+                
+                for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+                    const start = batchIndex * batchSize;
+                    const end = Math.min(start + batchSize, allFunds.length);
+                    const batchFunds = allFunds.slice(start, end);
+                    const tsCodes = batchFunds.map(f => f.ts_code);
+                    
+                    console.log(`处理第 ${batchIndex + 1}/${totalBatches} 批 (${tsCodes.length}只基金)...`);
+                    
+                    // 🔥 批量计算年度收益（使用全局变量控制缓存）
+                    const yearReturnsData = await fetch('/api/batch_year_returns', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ts_codes: tsCodes,
+                            years: AVAILABLE_YEARS,  // 使用所有可用年份
+                            use_cache: USE_CACHE     // 使用全局变量
+                        })
+                    }).then(res => res.json());
+                    
+                    // 🔥 批量计算评分（优化：复用年度收益数据，避免重复查询）
+                    const scoresData = await fetch('/api/batch_scores', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ts_codes: tsCodes,
+                            year_returns: yearReturnsData.data  // 传递已获取的收益数据
+                        })
+                    }).then(res => res.json());
+                    
+                    // 更新基金数据
+                    if (yearReturnsData.success && scoresData.success) {
+                        batchFunds.forEach((fund, index) => {
+                            const returns = yearReturnsData.data[fund.ts_code];
+                            if (returns) {
+                                fund.return2025 = returns['2025'];
+                                fund.return2024 = returns['2024'];
+                                fund.return2023 = returns['2023'];
+                            }
+                            fund.score = scoresData.data[fund.ts_code];
+                            
+                            // 🔥 根据评分计算评级
+                            if (fund.score !== null && fund.score !== undefined) {
+                                const score = parseFloat(fund.score);
+                                if (score > 80) {
+                                    fund.rating = '五星 ★★★★★';
+                                    fund.starCount = 5;
+                                } else if (score > 70) {
+                                    fund.rating = '四星 ★★★★';
+                                    fund.starCount = 4;
+                                } else if (score > 60) {
+                                    fund.rating = '三星 ★★★';
+                                    fund.starCount = 3;
+                                } else if (score > 50) {
+                                    fund.rating = '二星 ★★';
+                                    fund.starCount = 2;
+                                } else {
+                                    fund.rating = '一星 ★';
+                                    fund.starCount = 1;
+                                }
+                            } else {
+                                fund.rating = null;
+                                fund.starCount = 0;
+                            }
+                            
+                            // 初始化红星评级标记
+                            fund.isRedStar = false;
+                        });
+                        
+                        // 更新当前页显示
+                        const pageStart = (currentPage - 1) * pageSize;
+                        const pageEnd = pageStart + pageSize;
+                        batchFunds.forEach((fund, index) => {
+                            const globalIndex = start + index;
+                            if (globalIndex >= pageStart && globalIndex < pageEnd) {
+                                updateFundRow(fund);
+                            }
+                        });
+                    }
+                    
+                    // 更新进度（仅手动点击时显示）
+                    if (isManualClick) {
+                        const progress = Math.round((end / allFunds.length) * 100);
+                        btn.textContent = `计算中... ${progress}%`;
+                    }
+                }
+                
+                const endTime = performance.now();
+                const duration = ((endTime - startTime) / 1000).toFixed(2);
+                
+                // 🔥 批量检查所有 >= 4星的基金的金色评级
+                const allGoldCandidates = allFunds
+                    .filter(f => f.starCount >= 4)
+                    .map(f => ({ ts_code: f.ts_code, rating: f.starCount }));
+                
+                if (allGoldCandidates.length > 0) {
+                    try {
+                        console.log(`检查红星评级: ${allGoldCandidates.length} 只基金...`);
+                        const goldData = await fetch('/api/check_gold_rating', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ funds: allGoldCandidates })
+                        }).then(res => res.json());
+                        
+                        if (goldData.success) {
+                            let redStarCount = 0;
+                            allFunds.forEach(fund => {
+                                if (goldData.data[fund.ts_code]) {
+                                    fund.isRedStar = true;
+                                    redStarCount++;
+                                }
+                            });
+                            console.log(`✓ 发现 ${redStarCount} 只红星评级基金`);
+                        }
+                    } catch (error) {
+                        console.warn('检查红星评级失败:', error);
+                    }
+                }
+                
+                // 🔥 排序：先按星级降序，再按红星评级
+                allFunds.sort((a, b) => {
+                    // 第一排序：星级（降序）
+                    const starDiff = (b.starCount || 0) - (a.starCount || 0);
+                    if (starDiff !== 0) return starDiff;
+                    
+                    // 第二排序：红星评级（降序）
+                    const redA = a.isRedStar ? 1 : 0;
+                    const redB = b.isRedStar ? 1 : 0;
+                    return redB - redA;
+                });
+                
+                // 强制刷新当前页显示
+                displayPage(currentPage);
+                
+                btn.disabled = false;
+                btn.textContent = USE_CACHE ? '计算所有收益' : '⚡ 重新实时计算';
+                
+                if (isManualClick) {
+                    console.log(`✓ 批量计算完成！耗时: ${duration}秒，共 ${allFunds.length} 只基金`);
+                    if (statusSpan) {
+                        statusSpan.innerHTML = `✅ 计算完成！耗时 ${duration}秒`;
+                        statusSpan.style.color = '#16a34a';
+                    }
+                } else {
+                    console.log(`✓ 自动加载完成！耗时: ${duration}秒，共 ${allFunds.length} 只基金`);
+                    // 🔥 自动加载完成后显示列表
+                    showFundList();
+                }
+                console.log(`  数据来源: ${USE_CACHE ? '📦 缓存' : '⚡ 实时计算'}`);
+                
+            } catch (error) {
+                console.error('批量计算失败:', error);
+                showNotification('计算失败: ' + error.message, '错误');
+                btn.disabled = false;
+                btn.textContent = '重新计算';
+                
+                // 即使失败也显示列表
+                if (!isManualClick) {
+                    showFundList();
+                }
+            }
+        }
+
+        // 更新基金行数据
+        function updateFundRow(fund) {
+            const safeCode = fund.ts_code.replace(/\./g, '_');
+            
+            const cells = {
+                'return2025': fund.return2025,
+                'return2024': fund.return2024,
+                'return2023': fund.return2023,
+                'score': fund.score,
+                'rating': fund.rating
+            };
+
+            for (const [key, value] of Object.entries(cells)) {
+                const cell = document.getElementById(`${key}_${safeCode}`);
+                if (cell) {
+                    if (key === 'score') {
+                        cell.innerHTML = formatScore(value);
+                    } else if (key === 'rating') {
+                        // 🔥 使用红星评级标记
+                        cell.innerHTML = formatRating(value, fund.isRedStar || false);
+                    } else {
+                        cell.innerHTML = formatReturn(value);
+                    }
+                    cell.className = '';
+                }
+            }
+        }
+
+        // 计算年度收益
+        async function calculateYearReturn(tsCode, year) {
+            try {
+                const response = await fetch(`/api/fund/${tsCode}/year_return?year=${year}`);
+                const data = await response.json();
+                return data.success && data.data ? data.data.return : null;
+            } catch {
+                return null;
+            }
+        }
+
+        // 计算期间收益
+        async function calculatePeriodReturn(tsCode, days) {
+            try {
+                const response = await fetch(`/api/fund/${tsCode}/period_return?days=${days}`);
+                const data = await response.json();
+                return data.success && data.data ? data.data.return : null;
+            } catch {
+                return null;
+            }
+        }
+
+        // 计算评分
+        async function calculateScore(tsCode) {
+            try {
+                const response = await fetch(`/api/fund/${tsCode}/score`);
+                const data = await response.json();
+                return data.success && data.data ? data.data.总分 : null;
+            } catch {
+                return null;
+            }
+        }
+
+        // 显示基金详情
+        async function showFundDetail(tsCode) {
+            showLoading(true);
+            hideFundList();
+
+            try {
+                const response = await fetch(`/api/fund/${encodeURIComponent(tsCode)}`);
+                const data = await response.json();
+
+                if (data.success) {
+                    let report = data.data;
+                    
+                    console.log('基金详情数据:', report);
+                    console.log('原始评分数据:', report.综合评分);
+                    
+                    // 🔥 如果评分为空、无效或为0分，立即重新计算评分
+                    const needRecalculate = !report.综合评分 || 
+                                          report.综合评分.总分 === 0 || 
+                                          report.综合评分.总分 === null || 
+                                          report.综合评分.总分 === undefined ||
+                                          report.综合评分.评级 === '未评级';
+                    
+                    if (needRecalculate) {
+                        console.log('⚠️ 评分无效，立即重新计算评分...');
+                        console.log('  - 总分:', report.综合评分?.总分);
+                        console.log('  - 评级:', report.综合评分?.评级);
+                        
+                        try {
+                            showNotification('正在计算评分，请稍候...', '提示');
+                            const scoreResponse = await fetch(`/api/fund/${encodeURIComponent(tsCode)}/score`);
+                            const scoreData = await scoreResponse.json();
+                            
+                            console.log('评分API响应:', scoreData);
+                            
+                            if (scoreData.success && scoreData.data) {
+                                report.综合评分 = scoreData.data;
+                                console.log('✓ 评分计算完成:', report.综合评分);
+                            } else {
+                                console.error('评分API返回失败:', scoreData);
+                            }
+                        } catch (scoreError) {
+                            console.error('评分计算失败:', scoreError);
+                            // 使用默认值
+                            report.综合评分 = {
+                                总分: 0,
+                                收益得分: 0,
+                                风险得分: 0,
+                                评级: '未评级',
+                                数据年限: 0,
+                                收益详情: {},
+                                风险详情: {}
+                            };
+                        }
+                    } else {
+                        console.log('✓ 评分有效，直接使用:', report.综合评分.总分);
+                    }
+                    
+                    renderFundDetail(report);
+                    showDetail();
+                } else {
+                    showNotification('获取基金详情失败: ' + (data.error || '未知错误'), '错误');
+                }
+            } catch (error) {
+                showNotification('获取失败：' + error.message, '错误');
+                console.error('详情页错误:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+
+        // 渲染基金详情
+        function renderFundDetail(report) {
+            window.__currentFundReport = report;  // 缓存当前基金报告，用于图表等后续分析
+            // 基本信息（顶部）
+            document.getElementById('fundName').textContent = report.基本信息.基金名称;
+            document.getElementById('detailFundCode').textContent = report.基金代码;
+            document.getElementById('detailFundType').textContent = report.基本信息.基金类型;
+            document.getElementById('detailFundCompany').textContent = report.基本信息.管理公司;
+
+            // 基本信息表格
+            document.getElementById('infoCode').textContent = report.基金代码;
+            document.getElementById('infoName').textContent = report.基本信息.基金名称;
+            document.getElementById('infoType').textContent = report.基本信息.基金类型 || '--';
+            document.getElementById('infoCompany').textContent = report.基本信息.管理公司 || '--';
+            document.getElementById('infoFoundDate').textContent = report.基本信息.成立日期 || '--';
+            document.getElementById('infoListDate').textContent = report.基本信息.上市日期 || '--';
+            document.getElementById('infoStatus').textContent = report.基本信息.基金状态 === 'L' ? '在售' : '已停售';
+            document.getElementById('infoScale').textContent = report.最新规模 || '--';
+
+            // 加载持仓股票列表
+            loadHoldings(report.基金代码);
+            
+            // 生成投资建议
+            generateInvestmentAdvice(report);
+            
+            // 生成收益对比
+            generateReturnComparison(report.基金代码, report);
+
+            // 持仓集中度
+            const holdingInfo = document.getElementById('holdingInfo');
+            if (report.持仓集中度) {
+                holdingInfo.innerHTML = `
+                    <p style="font-size: 0.85rem; line-height: 1.8;">
+                        <strong>前5大持仓占比：</strong>${report.持仓集中度.前5大持仓占比}%<br>
+                        <strong>前10大持仓占比：</strong>${report.持仓集中度.前10大持仓占比}%<br>
+                        <strong>集中度评级：</strong>${report.持仓集中度.集中度评级}
+                    </p>
+                `;
+            } else {
+                holdingInfo.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.85rem;">暂无持仓数据</p>';
+            }
+
+            // 分析部分
+            // 风险指标 - 使用表格
+            const riskGrid = document.getElementById('riskGrid');
+            let riskHtml = '';
+            let riskCount = 0;
+            let riskRowHtml = '<tr>';
+            
+            for (const [metric, value] of Object.entries(report.风险分析)) {
+                if (value !== null && value !== undefined) {
+                    const displayValue = (metric === '最大回撤' || metric === '波动率') ? `${value}%` : value;
+                    riskRowHtml += `<th>${metric}：</th><td style="font-weight: 600;">${displayValue}</td>`;
+                    riskCount++;
+                    
+                    if (riskCount === 3) {
+                        riskRowHtml += '</tr>';
+                        riskHtml += riskRowHtml;
+                        riskRowHtml = '<tr>';
+                        riskCount = 0;
+                    }
+                }
+            }
+            
+            if (riskCount > 0) {
+                while (riskCount < 3) {
+                    riskRowHtml += '<th></th><td></td>';
+                    riskCount++;
+                }
+                riskRowHtml += '</tr>';
+                riskHtml += riskRowHtml;
+            }
+            
+            riskGrid.innerHTML = riskHtml || '<tr><td style="color: var(--text-secondary); text-align: center;">暂无数据</td></tr>';
+
+            // 综合评分 - 使用表格（新版v2.0）
+            const scoreGrid = document.getElementById('scoreGrid');
+            const score = report.综合评分;
+            
+            let scoreHtml = `
+                <tr>
+                    <th>综合评分：</th>
+                    <td style="font-weight: 600; font-size: 1.1rem;">${score.总分}/100 <span style="color: var(--primary-color);">${score.评级}</span></td>
+                    <th>数据年限：</th>
+                    <td style="font-weight: 600;">${score.数据年限 || '--'}年</td>
+                </tr>
+                <tr>
+                    <th>收益得分：</th>
+                    <td style="font-weight: 600; color: ${score.收益得分 > 60 ? '#dc2626' : '#666'};">${score.收益得分}/80</td>
+                    <th>风险得分：</th>
+                    <td style="font-weight: 600; color: ${score.风险得分 > 15 ? '#dc2626' : '#666'};">${score.风险得分}/20</td>
+                </tr>
+            `;
+            
+            // 显示收益详情
+            if (score.收益详情 && score.收益详情.累计收益 !== undefined) {
+                scoreHtml += `
+                <tr>
+                    <th>5年累计收益：</th>
+                    <td colspan="3" style="font-weight: 600; color: ${score.收益详情.累计收益 > 0 ? '#dc2626' : '#16a34a'};">
+                        ${score.收益详情.累计收益 > 0 ? '+' : ''}${score.收益详情.累计收益}%
+                    </td>
+                </tr>
+                `;
+            }
+            
+            // 显示风险详情（回撤用绿色表示）
+            if (score.风险详情 && score.风险详情.累计回撤 !== undefined) {
+                scoreHtml += `
+                <tr>
+                    <th>5年累计回撤：</th>
+                    <td colspan="3" style="font-weight: 600; color: #16a34a;">
+                        -${score.风险详情.累计回撤}%
+                    </td>
+                </tr>
+                `;
+            }
+            
+            scoreGrid.innerHTML = scoreHtml;
+        }
+
+        // 加载持仓股票列表
+        async function loadHoldings(tsCode) {
+            try {
+                const response = await fetch(`/api/fund/${encodeURIComponent(tsCode)}/holdings`);
+                const data = await response.json();
+
+                const holdingsTable = document.getElementById('holdingsTable');
+
+                if (!data.success) {
+                    console.error('API返回错误:', data.error);
+                    holdingsTable.innerHTML = `<p style="color: var(--danger-color); font-size: 0.85rem;">加载失败: ${data.error || '未知错误'}</p>`;
+                    return;
+                }
+
+                if (data.data && data.data.length > 0) {
+                    let tableHTML = `
+                        <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+                            <thead>
+                                <tr style="background: var(--bg-color); border-bottom: 2px solid var(--border-color);">
+                                    <th style="padding: 0.6rem; text-align: left;">排名</th>
+                                    <th style="padding: 0.6rem; text-align: left;">股票代码</th>
+                                    <th style="padding: 0.6rem; text-align: left;">股票名称</th>
+                                    <th style="padding: 0.6rem; text-align: right;">持仓市值(万)</th>
+                                    <th style="padding: 0.6rem; text-align: right;">占净值比(%)</th>
+                                    <th style="padding: 0.6rem; text-align: right;">占流通股比(%)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                    `;
+
+                    data.data.forEach((holding, index) => {
+                        tableHTML += `
+                            <tr style="border-bottom: 1px solid var(--border-color);">
+                                <td style="padding: 0.6rem;">${index + 1}</td>
+                                <td style="padding: 0.6rem; font-weight: 600; color: var(--primary-color);">${holding.symbol || '--'}</td>
+                                <td style="padding: 0.6rem; font-weight: 500;">${holding.stock_name || '--'}</td>
+                                <td style="padding: 0.6rem; text-align: right;">${holding.mkv ? (holding.mkv / 10000).toFixed(2) : '--'}</td>
+                                <td style="padding: 0.6rem; text-align: right; font-weight: 600;">${holding.stk_mkv_ratio ? holding.stk_mkv_ratio.toFixed(2) : '--'}</td>
+                                <td style="padding: 0.6rem; text-align: right;">${holding.stk_float_ratio ? holding.stk_float_ratio.toFixed(2) : '--'}</td>
+                            </tr>
+                        `;
+                    });
+
+                    tableHTML += `
+                            </tbody>
+                        </table>
+                        <p style="margin-top: 0.5rem; font-size: 0.75rem; color: var(--text-secondary);">
+                            数据日期：${data.data[0]?.end_date || '--'}
+                        </p>
+                    `;
+
+                    holdingsTable.innerHTML = tableHTML;
+                } else {
+                    holdingsTable.innerHTML = '<p style="color: var(--text-secondary); font-size: 0.85rem;">暂无持仓数据</p>';
+                }
+            } catch (error) {
+                console.error('加载持仓数据失败:', error);
+                document.getElementById('holdingsTable').innerHTML = `<p style="color: var(--danger-color);">网络错误或数据格式异常: ${error.message}</p>`;
+            }
+        }
+
+        function createDataCard(label, value, type = 'default') {
+            const card = document.createElement('div');
+            card.className = `data-card ${type}`;
+            card.innerHTML = `
+                <div class="data-label">${label}</div>
+                <div class="data-value">${value}</div>
+            `;
+            return card;
+        }
+
+        // 生成投资建议
+        function generateInvestmentAdvice(report) {
+            const adviceDiv = document.getElementById('investmentAdvice');
+            const score = report.综合评分.总分;
+            const risk = report.风险分析;
+            
+            let adviceHTML = '<div style="font-size: 0.9rem; line-height: 1.8;">';
+            
+            // 根据评分给出建议（红涨绿跌：好=红色，差=绿色）
+            if (score >= 80) {
+                adviceHTML += '<p style="font-size: 1rem; font-weight: 700; color: #dc2626; margin-bottom: 1rem;">⭐ 优质基金 - 推荐关注</p>';
+                adviceHTML += '<p>✅ <strong>优势：</strong>该基金综合表现优秀，在收益、风险控制等多个维度表现突出。</p>';
+                adviceHTML += '<p>💡 <strong>建议：</strong>适合中长期投资，可作为核心配置。建议定投或逢低布局。</p>';
+            } else if (score >= 70) {
+                adviceHTML += '<p style="font-size: 1rem; font-weight: 700; color: var(--primary-color); margin-bottom: 1rem;">⭐ 良好基金 - 值得考虑</p>';
+                adviceHTML += '<p>✅ <strong>优势：</strong>该基金整体表现良好，具备一定投资价值。</p>';
+                adviceHTML += '<p>💡 <strong>建议：</strong>适合中期投资，建议结合自身风险承受能力配置适当比例。</p>';
+            } else if (score >= 60) {
+                adviceHTML += '<p style="font-size: 1rem; font-weight: 700; color: var(--warning-color); margin-bottom: 1rem;">⭐ 中等基金</p>';
+                adviceHTML += '<p>⚠️ <strong>提示：</strong>该基金表现一般，部分指标有待提升。</p>';
+                adviceHTML += '<p>💡 <strong>建议：</strong>建议持续观察，短期配置为主，不宜重仓。</p>';
+            } else {
+                adviceHTML += '<p style="font-size: 1rem; font-weight: 700; color: #16a34a; margin-bottom: 1rem;">⭐ 弱势基金</p>';
+                adviceHTML += '<p>⚠️ <strong>风险：</strong>该基金综合表现较弱</p>';
+                adviceHTML += '<p>💡 <strong>建议：</strong>无建议。</p>';
+            }
+            
+            // 风险提示（红色=风险高）
+            if (risk.最大回撤 && risk.最大回撤 < -30) {
+                adviceHTML += '<p style="color: #dc2626; margin-top: 1rem;">⚠️ <strong>风险警示：</strong>该基金历史最大回撤超过30%，波动较大，请注意风险控制！</p>';
+            }
+            
+            adviceHTML += '</div>';
+            adviceDiv.innerHTML = adviceHTML;
+        }
+
+        // 全局图表对象
+        let returnsChartInstance = null;
+        let navChartInstance = null;
+        
+        // 🎨 绘制收益率和净值图表
+        function drawChartsForReturns(yearReturns, yearEndNav, fromCache, hs300Data = null, fundEstDate = null) {
+            // 收益图：根据基金成立日期确定起始年份
+            let returnsYears = Object.keys(yearReturns).filter(year => yearReturns[year] !== null);
+            
+            // 🔥 如果提供了基金成立日期，从成立年份的下一年开始
+            if (fundEstDate) {
+                const estYear = parseInt(fundEstDate.substring(0, 4));
+                const startYear = estYear + 1;  // 成立年份的下一年才有完整年度收益
+                const currentYear = new Date().getFullYear();
+                
+                // 生成从成立年份+1到当前年份的所有年份
+                returnsYears = [];
+                for (let year = startYear; year <= currentYear; year++) {
+                    returnsYears.push(year.toString());
+                }
+            } else if (fromCache && USE_CACHE) {
+                // 如果没有成立日期，使用缓存中的所有年份
+                returnsYears = AVAILABLE_YEARS.filter(year => year in yearReturns);
+            }
+            
+            // 按年份排序（升序，用于图表显示）
+            returnsYears.sort();
+            
+            const returnsValues = returnsYears.map(year => yearReturns[year] || 0);
+            
+            // 净值图：使用12月数据，所有可用年份
+            const navYears = Object.keys(yearEndNav).sort();
+            const navValues = navYears.map(year => yearEndNav[year]);
+            
+            // 绘制收益率图表
+            const returnsCtx = document.getElementById('returnsChart');
+            if (returnsCtx) {
+                // 销毁旧图表
+                if (returnsChartInstance) {
+                    returnsChartInstance.destroy();
+                }
+                
+                returnsChartInstance = new Chart(returnsCtx, {
+                    type: 'bar',
+                    data: {
+                        labels: returnsYears.map(y => y + '年'),
+                        datasets: [{
+                            label: '年度收益率 (%)',
+                            data: returnsValues,
+                            backgroundColor: returnsValues.map(v => 
+                                v > 0 ? 'rgba(220, 38, 38, 0.7)' :    // 红色（涨）
+                                v < 0 ? 'rgba(22, 163, 74, 0.7)' :     // 绿色（跌）
+                                'rgba(100, 116, 139, 0.7)'              // 灰色（持平）
+                            ),
+                            borderColor: returnsValues.map(v => 
+                                v > 0 ? 'rgba(220, 38, 38, 1)' : 
+                                v < 0 ? 'rgba(22, 163, 74, 1)' : 
+                                'rgba(100, 116, 139, 1)'
+                            ),
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const value = context.parsed.y;
+                                        return value > 0 ? `+${value}%` : `${value}%`;
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                ticks: {
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 绘制净值图表（含沪深300对照）
+            const navCtx = document.getElementById('navChart');
+            if (navCtx) {
+                // 销毁旧图表
+                if (navChartInstance) {
+                    navChartInstance.destroy();
+                }
+                
+                // 准备数据集
+                const datasets = [{
+                    label: '基金净值',
+                    data: navValues,
+                    borderColor: 'rgba(37, 99, 235, 1)',
+                    backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    pointBackgroundColor: 'rgba(37, 99, 235, 1)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 2,
+                    yAxisID: 'y'
+                }];
+                
+                // 如果有沪深300数据，添加对照曲线
+                let hs300Values = [];
+                if (hs300Data && Object.keys(hs300Data).length > 0) {
+                    // 匹配年份，从沪深300数据中提取对应年份的最新值
+                    hs300Values = navYears.map(year => {
+                        // 🔥 先尝试12月数据（年末），如果没有则找该年的最新日期
+                        // 1. 尝试12月（12-31, 12-30, ..., 12-01）
+                        for (let day = 31; day >= 1; day--) {
+                            const dateStr = `${year}-12-${String(day).padStart(2, '0')}`;
+                            if (hs300Data[dateStr] !== undefined) {
+                                return hs300Data[dateStr];
+                            }
+                        }
+                        
+                        // 2. 如果12月没数据（如2025年还没到12月），找该年的最新日期
+                        const yearDates = Object.keys(hs300Data)
+                            .filter(date => date.startsWith(year + '-'))
+                            .sort()
+                            .reverse();
+                        
+                        if (yearDates.length > 0) {
+                            console.log(`${year}年未到12月，使用最新日期: ${yearDates[0]}`);
+                            return hs300Data[yearDates[0]];
+                        }
+                        
+                        return null;
+                    });
+                    
+                    // 归一化：让两个Y轴在相同高度显示相同的涨幅百分比
+                    // 计算基准值（第一个有效值）
+                    const fundBase = navValues.find(v => v !== null) || 1;
+                    const hs300Base = hs300Values.find(v => v !== null) || 1;
+                    
+                    // 转换为百分比涨幅（相对于基准值）
+                    const fundPercents = navValues.map(v => v !== null ? ((v - fundBase) / fundBase * 100) : null);
+                    const hs300Percents = hs300Values.map(v => v !== null ? ((v - hs300Base) / hs300Base * 100) : null);
+                    
+                    // 替换datasets，使用百分比数据
+                    datasets[0].data = fundPercents;
+                    datasets[0].label = '基金涨幅 (%)';
+                    
+                    datasets.push({
+                        label: '沪深300涨幅 (%)',
+                        data: hs300Percents,
+                        borderColor: 'rgba(220, 38, 38, 0.8)',
+                        backgroundColor: 'transparent',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        fill: false,
+                        tension: 0.3,
+                        pointRadius: 3,
+                        pointHoverRadius: 5,
+                        pointBackgroundColor: 'rgba(220, 38, 38, 1)',
+                        pointBorderColor: '#fff',
+                        pointBorderWidth: 2,
+                        yAxisID: 'y'  // 使用同一个Y轴
+                    });
+                }
+                
+                navChartInstance = new Chart(navCtx, {
+                    type: 'line',
+                    data: {
+                        labels: navYears.map(y => y + '年'),
+                        datasets: datasets
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false
+                        },
+                        plugins: {
+                            legend: {
+                                display: hs300Values.length > 0,  // 有对照数据时显示图例
+                                position: 'top',
+                                labels: {
+                                    boxWidth: 12,
+                                    padding: 10,
+                                    font: {
+                                        size: 11
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        const label = context.dataset.label || '';
+                                        const value = context.parsed.y;
+                                        if (hs300Values.length > 0) {
+                                            // 显示百分比
+                                            return `${label}: ${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+                                        } else {
+                                            // 显示净值
+                                            return `${label}: ${value.toFixed(4)}`;
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                position: 'left',
+                                title: {
+                                    display: hs300Values.length > 0,
+                                    text: '涨幅 (%)',
+                                    font: {
+                                        size: 11
+                                    }
+                                },
+                                ticks: {
+                                    callback: function(value) {
+                                        if (hs300Values.length > 0) {
+                                            return value.toFixed(1) + '%';
+                                        } else {
+                                            return value.toFixed(2);
+                                        }
+                                    }
+                                },
+                                grid: {
+                                    color: 'rgba(0, 0, 0, 0.05)'
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        }
+
+        // 生成收益对比
+        async function generateReturnComparison(tsCode, fundReport) {
+            const effectiveReport = fundReport || window.__currentFundReport;
+            if (!effectiveReport) {
+                console.warn('generateReturnComparison: 无有效基金报告数据，已跳过绘制。', tsCode);
+                return;
+            }
+            window.__currentFundReport = effectiveReport;
+            const comparisonDiv = document.getElementById('returnComparison');
+            
+            try {
+                // 🔥 并行获取收益数据、净值数据和沪深300数据
+                const [returnsResponse, navResponse, hs300Response] = await Promise.all([
+                    fetch('/api/batch_year_returns', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            ts_codes: [tsCode],
+                            years: AVAILABLE_YEARS,  // 使用所有可用年份
+                            use_cache: USE_CACHE     // 使用全局变量
+                        })
+                    }),
+                    fetch(`/api/fund/${tsCode}/year_end_nav`),
+                    fetch('/api/index/000300/data')
+                ]);
+                
+                const returnsData = await returnsResponse.json();
+                const navData = await navResponse.json();
+                const hs300DataResponse = await hs300Response.json();
+                
+                // 🔥 动态获取所有年份的收益数据
+                let yearReturns = {};
+                if (returnsData.success && returnsData.data[tsCode]) {
+                    yearReturns = returnsData.data[tsCode];
+                }
+                
+                // 获取净值数据
+                let yearEndNav = {};
+                if (navData.success && navData.data) {
+                    yearEndNav = navData.data;
+                }
+                
+                // 获取沪深300数据
+                let hs300Data = {};
+                if (hs300DataResponse.success && hs300DataResponse.data) {
+                    hs300Data = hs300DataResponse.data;
+                    console.log('✓ 沪深300数据获取成功:', Object.keys(hs300Data).length, '天');
+                } else {
+                    console.log('⚠️ 沪深300数据获取失败:', hs300DataResponse.error);
+                }
+                
+                // 🎨 绘制图表（含沪深300对照）
+                // 获取基金成立日期
+                const fundEstDate = effectiveReport?.基本信息?.成立日期 || null;
+                drawChartsForReturns(yearReturns, yearEndNav, returnsData.from_cache, hs300Data, fundEstDate);
+                
+                let html = '<div style="font-size: 0.85rem;">';
+                html += '<p style="font-weight: 600; margin-bottom: 0.8rem; color: var(--text-primary);">📈 历年收益走势分析</p>';
+                
+                // 🔥 从 yearReturns 对象构建年份数组
+                const sortedYears = Object.keys(yearReturns).sort((a, b) => b - a);  // 降序
+                const returns = sortedYears.map(year => yearReturns[year]).filter(r => r !== null);
+                
+                // 分析趋势
+                if (returns.length >= 2) {
+                    let trend = '';
+                    if (returns[0] > returns[1]) {  // 最新年份 vs 上一年
+                        trend = '<span style="color: #dc2626;">📈 上升趋势</span> - 收益率呈现改善';
+                    } else {
+                        trend = '<span style="color: #16a34a;">📉 下降趋势</span> - 收益率有所回落';
+                    }
+                    html += `<p style="margin-bottom: 0.5rem;"><strong>趋势：</strong>${trend}</p>`;
+                }
+                
+                // 收益稳定性
+                if (returns.length >= 3) {
+                    const allPositive = returns.every(r => r > 0);
+                    const allNegative = returns.every(r => r < 0);
+                    
+                    if (allPositive) {
+                        html += '<p style="margin-bottom: 0.5rem;"><strong>稳定性：</strong><span style="color: #dc2626;">✅ 优秀</span> - 连续盈利</p>';
+                    } else if (allNegative) {
+                        html += '<p style="margin-bottom: 0.5rem;"><strong>稳定性：</strong><span style="color: #16a34a;">⚠️ 较差</span> - 持续亏损</p>';
+                    } else {
+                        html += '<p style="margin-bottom: 0.5rem;"><strong>稳定性：</strong><span style="color: var(--warning-color);">⚡ 波动</span> - 收益波动较大</p>';
+                    }
+                }
+                
+                // 🔥 显示数据来源
+                if (returnsData.from_cache !== undefined) {
+                    const sourceText = returnsData.from_cache ? '📦 缓存数据' : '⚡ 实时计算';
+                    html += `<p style="margin-bottom: 0.5rem; color: var(--text-secondary);"><strong>数据来源：</strong>${sourceText}</p>`;
+                }
+                
+                // 年度对比表格
+                html += '<table style="width: 100%; margin-top: 1rem; border-collapse: collapse;">';
+                html += '<tr style="background: var(--bg-color); font-weight: 600;">';
+                html += '<td style="padding: 0.5rem; border: 1px solid var(--border-color);">年份</td>';
+                html += '<td style="padding: 0.5rem; border: 1px solid var(--border-color); text-align: right;">收益率</td>';
+                html += '<td style="padding: 0.5rem; border: 1px solid var(--border-color); text-align: center;">表现</td>';
+                html += '</tr>';
+                
+                // 🔥 动态构建年份数据（支持所有年份）
+                const yearData = sortedYears.map(year => ({
+                    year: `${year}年`,
+                    return: yearReturns[year]
+                }));
+                
+                yearData.forEach(item => {
+                    if (item.return !== null) {
+                        // 修复：0% 应该显示灰色（中性），不是绿色
+                        let color, displayText;
+                        if (item.return > 0) {
+                            color = '#dc2626';  // 红色
+                            displayText = `+${item.return}%`;
+                        } else if (item.return < 0) {
+                            color = '#16a34a';  // 绿色
+                            displayText = `${item.return}%`;
+                        } else {
+                            color = '#64748b';  // 灰色（中性）
+                            displayText = '0%';
+                        }
+                        
+                        const performance = item.return > 10 ? '🔥 优秀' : item.return > 0 ? '✅ 盈利' : item.return === 0 ? '➖ 持平' : item.return > -10 ? '⚠️ 小幅亏损' : '❌ 较大亏损';
+                        html += `<tr style="border-bottom: 1px solid var(--border-color);">`;
+                        html += `<td style="padding: 0.5rem; border: 1px solid var(--border-color);">${item.year}</td>`;
+                        html += `<td style="padding: 0.5rem; border: 1px solid var(--border-color); text-align: right; font-weight: 600; color: ${color};">${displayText}</td>`;
+                        html += `<td style="padding: 0.5rem; border: 1px solid var(--border-color); text-align: center;">${performance}</td>`;
+                        html += `</tr>`;
+                    }
+                });
+                
+                html += '</table>';
+                html += '</div>';
+                
+                comparisonDiv.innerHTML = html;
+            } catch (error) {
+                console.error('生成收益对比失败:', error);
+                comparisonDiv.innerHTML = '<p style="color: var(--danger-color);">加载失败</p>';
+            }
+        }
+
+        // 重置筛选
+        function resetFilters() {
+            document.getElementById('fundSearch').value = '';
+            document.getElementById('fundCompany').value = '';
+            document.getElementById('fundType').value = '';
+            document.getElementById('investType').value = '';
+            document.getElementById('riskLevel').value = '';
+            document.getElementById('fundStatus').value = 'L';
+        }
+
+        // UI 控制
+        function showLoading(show) {
+            document.getElementById('loading').classList.toggle('show', show);
+        }
+
+        function showFundList() {
+            document.getElementById('fundListSection').classList.add('show');
+        }
+
+        function hideFundList() {
+            document.getElementById('fundListSection').classList.remove('show');
+        }
+
+        function showDetail() {
+            document.getElementById('detailSection').classList.add('show');
+            showFloatBackBtn();
+        }
+
+        function hideDetail() {
+            document.getElementById('detailSection').classList.remove('show');
+            showFundList();
+            hideFloatBackBtn();
+        }
+        
+        // 浮动返回按钮控制
+        function showFloatBackBtn() {
+            document.getElementById('floatBackBtn').classList.add('show');
+        }
+        
+        function hideFloatBackBtn() {
+            document.getElementById('floatBackBtn').classList.remove('show');
+        }
+        
+        function backToHome() {
+            hideDetail();
+        }
+    </script>
+
+    <!-- 页脚 -->
+    <footer class="footer">
+        <div class="footer-content">
+            <!-- 风险提示 -->
+            <div class="footer-warning">
+                <h4>⚠️ 投资风险提示</h4>
+                <p>
+                    本系统提供的所有数据和分析仅供参考，不构成任何投资建议。基金投资有风险，过往业绩不代表未来表现。
+                    投资者应充分了解基金的投资风险，根据自身风险承受能力谨慎决策，并自行承担投资风险。
+                    请在投资前仔细阅读基金合同、招募说明书等法律文件。
+                </p>
+            </div>
+
+            <!-- 链接 -->
+            <div class="footer-links">
+                <a href="https://github.com/hengruiyun/AI-Fund-Master" target="_blank">
+                    <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.012 8.012 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+                    </svg>
+                    GitHub 开源项目
+                </a>
+            </div>
+
+            <!-- 版权信息 -->
+            <div class="footer-copyright">
+                <p>© 2025 AI基金大师 | 作者：267278466@qq.com</p>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // 页面加载完成后自动检查更新
+        (function checkForUpdates() {
+            // 延迟 2 秒后检查更新，避免影响页面加载
+            setTimeout(async () => {
+                try {
+                    const response = await fetch('/api/check_update');
+                    const result = await response.json();
+                    
+                    if (result.success && result.has_update) {
+                        const data = result.data;
+                        
+                        // 显示更新通知
+                        const message = `发现新版本 v${data.latest_version}！\n\n` +
+                                      `当前版本：v${data.current_version}\n` +
+                                      `最新版本：v${data.latest_version}\n\n` +
+                                      `是否前往下载页面？`;
+                        
+                        if (confirm(message)) {
+                            window.open(data.download_url, '_blank');
+                        }
+                        
+                        console.log('✓ 发现新版本:', data);
+                    } else {
+                        console.log('✓ 当前已是最新版本');
+                    }
+                } catch (error) {
+                    // 静默失败，不影响用户使用
+                    console.log('检查更新失败:', error.message);
+                }
+            }, 2000);
+        })();
+
+        // 🔥 心跳保活机制：每10分钟发送一次请求，防止20分钟空闲自动退出
+        (function startHeartbeat() {
+            const HEARTBEAT_INTERVAL = 10 * 60 * 1000;  // 10分钟
+            
+            async function sendHeartbeat() {
+                try {
+                    const response = await fetch('/api/version', {
+                        method: 'GET',
+                        headers: { 'X-Heartbeat': 'true' }
+                    });
+                    
+                    if (response.ok) {
+                        const now = new Date().toLocaleTimeString();
+                        console.log(`💓 [${now}] 心跳保活成功 - 已重置空闲计时器`);
+                    }
+                } catch (error) {
+                    console.warn('💔 心跳保活失败:', error.message);
+                }
+            }
+            
+            // 立即发送一次心跳（延迟5秒，避免与初始化冲突）
+            setTimeout(sendHeartbeat, 5000);
+            
+            // 每10分钟发送一次
+            setInterval(sendHeartbeat, HEARTBEAT_INTERVAL);
+            
+            console.log('✓ 心跳保活已启动（间隔：10分钟）');
+        })();
+    </script>
+</body>
+</html>
